@@ -19,45 +19,45 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // SGP4 константы
-    static constexpr double ae = 1.0;                    // Earth radius in ER units
-    static constexpr double tothrd = 2.0 / 3.0;
-    static constexpr double xke = 0.0743669161331734049; // sqrt(GM) in ER^(3/2)/min
-    static constexpr double ck2 = 5.413080e-4;           // J2/2
-    static constexpr double ck4 = 0.62098875e-6;         // -3J4/8
-    static constexpr double j3 = -0.253881e-5;           // J3
-    static constexpr double xkmper = 6378.137;           // Earth radius in km
-    static constexpr double minute_per_day = 1440.0;
-    static constexpr double ae_to_km = 6378.137;
-    static constexpr double s = 1.012229;                // AE/RE ratio
+    // Константы SGP4
+    static constexpr double ke = 7.43669161e-2;        // sqrt(GM) ER^(3/2)/min
+    static constexpr double k2 = 5.413080e-4;          // J2/2
+    static constexpr double k4 = 0.62098875e-6;        // -3J4/8
+    static constexpr double a3ovk2 = -1.0 / 3.0;       // J3/(3*J2)
+    static constexpr double xkmper = 6378.137;         // Радиус Земли в км
+    static constexpr double min_per_day = 1440.0;      // Минут в сутках
+    static constexpr double ae = 1.0;                  // Расстояние в радиусах Земли
+    static constexpr double de2ra = M_PI / 180.0;      // Градусы в радианы
 
-    struct SGP4Elements {
-        double a;          // Semi-major axis (Earth radii)
-        double ecco;      // Eccentricity
-        double inclo;     // Inclination (radians)
-        double nodeo;     // RAAN (radians)
-        double argpo;     // Argument of perigee (radians)
-        double mo;        // Mean anomaly (radians)
-        double no;        // Mean motion (radians/minute)
-        double bstar;     // Drag term
-        double aycof;
+    struct Elements {
+        double inclo;     // Наклонение (рад)
+        double nodeo;     // Долгота восходящего узла (рад)
+        double ecco;      // Эксцентриситет
+        double argpo;     // Аргумент перигея (рад)
+        double mo;        // Средняя аномалия (рад)
+        double no;        // Среднее движение (рад/мин)
+        double bstar;     // Баллистический коэффициент
 
-        // Вычисляемые параметры
-        double alta, altp, a0, d2, d3, d4, del1, del2, del3;
-        double eta, argpdot, omgcof, sinmao, t2cof, t3cof, t4cof, t5cof;
-        double x1mth2, x7thm1, xlcof, xmcof, nodecf, nodedot, xnodot;
-        double e0, mdot;
+        // Производные элементы
+        double a;         // Большая полуось (ER)
+        double ndot;      // Изменение среднего движения (рад/мин^2)
+        double nddot;     // Вторая производная среднего движения (рад/мин^3)
+        double alta;      // Высота апогея (км)
+        double altp;      // Высота перигея (км)
+        double del1;      // Первая поправка к большой полуоси
+        double del2;      // Вторая поправка к большой полуоси
+        double del3;      // Третья поправка к большой полуоси
+        double xincl;     // Наклонение с учетом возмущений
+        double xnodp;     // Узел с учетом возмущений
+        double aodp;      // Большая полуось с учетом возмущений
+        double ao, delo;  // Оригинальные элементы
     };
 
     void initParameters(const TLEParser::TLEData& tle);
-    void calculateSecularEffects(double tsince, double& xll, double& omgasm,
-                                 double& xnodes, double& em, double& xinc,
-                                 double& xn) const;
-    void calculatePeriodicEffects(double tsince, double& em, double& xinc,
-                                  double& omgasm, double& xnodes, double& xll) const;
-    void solveKepler(double& xll, double e) const;
+    void calculateDerivatives();
+    void propagate(double tsince, QVector3D& pos, QVector3D& vel) const;
 
-    SGP4Elements elements_;
+    Elements elements_;
     QDateTime epoch_;
 };
 

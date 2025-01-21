@@ -1,0 +1,183 @@
+### C++ ###
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+### Qt ###
+# Qt-specific
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qmlc
+*.jsc
+Makefile*
+*build-*
+*.qm
+*.prl
+
+# Qt Creator
+*.autosave
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.qmlproject.user
+*.qmlproject.user.*
+CMakeLists.txt.user*
+
+# QtCreator CMake
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+# QtCreator local machine specific files
+*creator.user*
+
+### CMake ###
+build/
+BUILD/
+Debug/
+Release/
+x64/
+Win32/
+[Bb]uild*/
+[Dd]ebug*/
+[Rr]elease*/
+
+# VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# CLion
+.idea/
+cmake-build-*/
+
+# Eclipse
+.project
+.cproject
+.settings/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Project specific
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Log files
+*.log
+
+# Documentation
+doc/html/
+doc/latex/
+docs/_build/
+
+# Test output
+Testing/
+test/output/
+testresults/
+
+# Dependencies
+extern/
+external/
+third-party/
+vendor/
+
+# Generated files
+version.h
+config.h
+*.generated.*
+
+# Custom binary output directories
+bin/
+lib/
+out/
+
+# Test coverage reports
+coverage/
+*.gcno
+*.gcda
+*.gcov
+
+# Profiling data
+gmon.out
+callgrind.out*
+perf.data*
+
+# Patch/diff files
+*.patch
+*.diff

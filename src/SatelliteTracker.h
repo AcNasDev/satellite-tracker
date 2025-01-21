@@ -1,0 +1,80 @@
+#ifndef SATELLITETRACKER_H
+#define SATELLITETRACKER_H
+
+#pragma once
+
+#include <QObject>
+#include <QTimer>
+#include <QDateTime>
+#include <QDebug>
+#include <memory>
+
+#include "SGP4.h"
+#include "CoordGeodetic.h"
+#include "CoordTopocentric.h"
+#include "Observer.h"
+#include "Tle.h"
+
+class SatelliteTracker : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit SatelliteTracker(const QString& line1, const QString& line2, QObject* parent = nullptr)
+        : QObject(parent)
+    {
+        try {
+            tle = std::make_unique<libsgp4::Tle>("Satellite", line1.toStdString(), line2.toStdString());
+            sgp4 = std::make_unique<libsgp4::SGP4>(*tle);
+
+            QTimer* timer = new QTimer(this);
+            connect(timer, &QTimer::timeout, this, &SatelliteTracker::updatePosition);
+            timer->start(1000);
+
+            updatePosition();
+
+        } catch (const libsgp4::TleException& e) {
+            qDebug() << "TLE Error:" << e.what();
+            throw;
+        }
+    }
+
+private slots:
+    void updatePosition() {
+        // Получаем текущее время в UTC
+        QDateTime now = QDateTime::currentDateTimeUtc();
+
+        libsgp4::DateTime dt(
+            now.date().year(),
+            now.date().month(),
+            now.date().day(),
+            now.time().hour(),
+            now.time().minute(),
+            now.time().second()
+            );
+
+        libsgp4::Eci eci = sgp4->FindPosition(dt);
+        libsgp4::CoordGeodetic geo = eci.ToGeodetic();
+
+        qDebug() << "\nCurrent satellite position (UTC):" << now.toString("yyyy-MM-dd HH:mm:ss");
+        qDebug() << "ECF coordinates (km):";
+        qDebug() << "X:" << QString::number(eci.Position().x, 'f', 3);
+        qDebug() << "Y:" << QString::number(eci.Position().y, 'f', 3);
+        qDebug() << "Z:" << QString::number(eci.Position().z, 'f', 3);
+        qDebug() << "\nGeographic coordinates:";
+        qDebug() << "Latitude:" << QString::number(geo.latitude * 180.0 / M_PI, 'f', 6) << "degrees";
+        qDebug() << "Longitude:" << QString::number(geo.longitude * 180.0 / M_PI, 'f', 6) << "degrees";
+        qDebug() << "Altitude:" << QString::number(geo.altitude, 'f', 3) << "km";
+        qDebug() << "\nVelocity (km/s):";
+        qDebug() << "X:" << QString::number(eci.Velocity().x, 'f', 6);
+        qDebug() << "Y:" << QString::number(eci.Velocity().y, 'f', 6);
+        qDebug() << "Z:" << QString::number(eci.Velocity().z, 'f', 6);
+        qDebug() << "----------------------------------------";
+    }
+
+private:
+    std::unique_ptr<libsgp4::Tle> tle;
+    std::unique_ptr<libsgp4::SGP4> sgp4;
+};
+
+#endif // SATELLITETRACKER_H

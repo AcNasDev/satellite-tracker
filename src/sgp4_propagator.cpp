@@ -26,110 +26,127 @@ void SGP4Propagator::debugElements() const {
 void SGP4Propagator::initParameters(const TLEParser::TLEData& tle) {
     epoch_ = tle.epoch;
 
-    // Конвертация элементов
+    // Конвертация начальных элементов в каноническую систему единиц
     elements_.inclo = tle.inclination * de2ra;
     elements_.nodeo = tle.right_ascension * de2ra;
     elements_.ecco = tle.eccentricity;
     elements_.argpo = tle.argument_perigee * de2ra;
     elements_.mo = tle.mean_anomaly * de2ra;
     elements_.no = tle.mean_motion * 2.0 * M_PI / min_per_day;
-    elements_.bstar = tle.bstar;
+    elements_.bstar = tle.bstar / ae; // Важно: масштабирование BSTAR
 
-    // Вычисление производных элементов
+    qDebug() << "\nInitial orbital elements:";
+    qDebug() << "Inclination (rad):" << elements_.inclo;
+    qDebug() << "RAAN (rad):" << elements_.nodeo;
+    qDebug() << "Eccentricity:" << elements_.ecco;
+    qDebug() << "Arg of perigee (rad):" << elements_.argpo;
+    qDebug() << "Mean anomaly (rad):" << elements_.mo;
+    qDebug() << "Mean motion (rad/min):" << elements_.no;
+    qDebug() << "BSTAR:" << elements_.bstar;
+
+    // Расчет вспомогательных величин
     double cosio = cos(elements_.inclo);
-    double theta2 = cosio * cosio;
-    double x3thm1 = 3.0 * theta2 - 1.0;
-    double eosq = elements_.ecco * elements_.ecco;
-    double betao2 = 1.0 - eosq;
+    double cosio2 = cosio * cosio;
+    double betao2 = 1.0 - elements_.ecco * elements_.ecco;
     double betao = sqrt(betao2);
 
-    // Коррекция средней движения
-    double a1 = pow(ke / elements_.no, 2.0/3.0);
-    double delta1 = 1.5 * k2 * x3thm1 / (a1 * a1 * betao * betao2);
-    double ao = a1 * (1.0 - delta1 * (0.5 * 2.0/3.0 + delta1 * (1.0 + 134.0/81.0 * delta1)));
-    double delo = 1.5 * k2 * x3thm1 / (ao * ao * betao * betao2);
+    // Восстановление оригинального среднего движения
+    double ak = pow(ke / elements_.no, 2.0/3.0);
+    double d1 = 0.75 * k2 * (3.0 * cosio2 - 1.0) / (betao2 * betao);
+    double del1 = d1 / (ak * ak);
+    double ao = ak * (1.0 - del1 * (1.0/3.0 + del1 * (1.0 + 134.0/81.0 * del1)));
 
-    elements_.a = ao * xkmper;
-    elements_.n = elements_.no / (1.0 + delo);
-    elements_.e = elements_.ecco;
-    elements_.i = elements_.inclo;
-    elements_.omega = elements_.argpo;
-    elements_.Omega = elements_.nodeo;
+    elements_.a = ao;
+    elements_.n = elements_.no;
 
-    qDebug() << "\nInitialization parameters:";
-    qDebug() << "a1:" << a1;
-    qDebug() << "delta1:" << delta1;
-    qDebug() << "ao:" << ao;
-    qDebug() << "delo:" << delo;
+    qDebug() << "\nDerived elements:";
+    qDebug() << "Semi-major axis (ER):" << elements_.a;
+    qDebug() << "Corrected mean motion (rad/min):" << elements_.n;
 }
 
 void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) const {
     qDebug() << "\nPropagation at time:" << tsince << "minutes";
 
-    // Вековые возмущения
-    double xmp = elements_.mo + elements_.n * tsince;
-    double omega = elements_.omega + 0.75 * k2 * elements_.n * tsince * cos(elements_.i);
-    double xnode = elements_.Omega - 1.5 * k2 * elements_.n * tsince * cos(elements_.i);
+    // Обновление средних элементов с учетом вековых возмущений
+    double xndt = elements_.n * 1.5 * k2 * (3.0 * cos(elements_.inclo) * cos(elements_.inclo) - 1.0) /
+                  (pow(1.0 - elements_.ecco * elements_.ecco, 1.5));
+    double xnddt = elements_.n * xndt * k2 * cos(elements_.inclo) /
+                   (pow(1.0 - elements_.ecco * elements_.ecco, 2.0));
 
-    // Исправлено: правильный учет BSTAR
-    double e = elements_.e;
-    if (elements_.bstar != 0.0) {
-        e = elements_.e - elements_.bstar * ke * elements_.a * sin(xmp) * tsince;
-    }
+    // Обновление среднего движения с учетом торможения
+    double xn = elements_.n + xndt * tsince + xnddt * tsince * tsince * 0.5;
 
-    qDebug() << "Secular perturbations:";
-    qDebug() << "Mean anomaly:" << xmp / de2ra;
-    qDebug() << "Argument of perigee:" << omega / de2ra;
-    qDebug() << "RAAN:" << xnode / de2ra;
+    // Обновление эксцентриситета с учетом атмосферного торможения
+    double e = elements_.ecco - elements_.bstar * tsince;
+    e = std::max(0.0, std::min(0.999999, e)); // Ограничение эксцентриситета
+
+    qDebug() << "Updated elements:";
+    qDebug() << "Mean motion (rad/min):" << xn;
     qDebug() << "Eccentricity:" << e;
 
+    // Обновление средней аномалии
+    double xmp = elements_.mo + xn * tsince;
+
+    // Вековые возмущения для аргумента перигея и RAAN
+    double omega = elements_.argpo + 0.75 * k2 * sin(elements_.inclo) * sin(elements_.inclo) *
+                                         xn * tsince / (elements_.n * (1.0 - e * e));
+    double xnode = elements_.nodeo - 1.5 * k2 * cos(elements_.inclo) * xn * tsince /
+                                         (elements_.n * (1.0 - e * e));
+
+    qDebug() << "Secular perturbations:";
+    qDebug() << "Mean anomaly (rad):" << xmp;
+    qDebug() << "Arg of perigee (rad):" << omega;
+    qDebug() << "RAAN (rad):" << xnode;
+
     // Решение уравнения Кеплера
-    double E = xmp;
-    for(int i = 0; i < 10; i++) {
-        double E_old = E;
-        E = xmp + e * sin(E);
-        if(fabs(E - E_old) < 1.0e-12) break;
+    double xl = xmp;
+    double u = xl - xnode;
+    double converge = false;
+    for(int i = 0; i < 10 && !converge; i++) {
+        double sinu = sin(u);
+        double cosu = cos(u);
+        double old_u = u;
+        u = u + (xl - xnode - u + e * sinu) / (1.0 - e * cosu);
+        converge = fabs(u - old_u) < 1e-12;
     }
 
-    // Вычисление истинной аномалии
-    double sinE = sin(E);
-    double cosE = cos(E);
-    double sinv = (sqrt(1.0 - e * e) * sinE) / (1.0 - e * cosE);
-    double cosv = (cosE - e) / (1.0 - e * cosE);
-    double v = atan2(sinv, cosv);
-
-    // Позиция в плоскости орбиты
-    double r = elements_.a * (1.0 - e * cosE);
-    double rdot = ke * sqrt(elements_.a) * sinE / sqrt(r);
+    // Вычисление позиции в орбитальной плоскости
+    double r = elements_.a * (1.0 - e * cos(u));
+    double rdot = ke * sqrt(elements_.a) * e * sin(u) / r;
     double rfdot = ke * sqrt(elements_.a * (1.0 - e * e)) / r;
 
-    qDebug() << "\nOrbital plane values:";
-    qDebug() << "r (km):" << r;
-    qDebug() << "rdot (km/min):" << rdot;
+    qDebug() << "Orbital plane values:";
+    qDebug() << "r (ER):" << r;
+    qDebug() << "rdot (ER/min):" << rdot;
     qDebug() << "rfdot (rad/min):" << rfdot;
 
     // Преобразование в ECI
-    double sinO = sin(xnode);
-    double cosO = cos(xnode);
-    double sino = sin(omega + v);
-    double coso = cos(omega + v);
-    double sini = sin(elements_.i);
-    double cosi = cos(elements_.i);
+    double cosu = cos(u);
+    double sinu = sin(u);
+    double cosw = cos(omega);
+    double sinw = sin(omega);
+    double cosi = cos(elements_.inclo);
+    double sini = sin(elements_.inclo);
+    double cosnode = cos(xnode);
+    double sinnode = sin(xnode);
 
-    pos.setX(r * (cosO * coso - sinO * sino * cosi));
-    pos.setY(r * (sinO * coso + cosO * sino * cosi));
-    pos.setZ(r * sino * sini);
+    // Позиция (в км)
+    double x = r * ((cosnode * cosw - sinnode * sinw * cosi) * cosu -
+                    (cosnode * sinw + sinnode * cosw * cosi) * sinu);
+    double y = r * ((sinnode * cosw + cosnode * sinw * cosi) * cosu -
+                    (sinnode * sinw - cosnode * cosw * cosi) * sinu);
+    double z = r * (sinw * cosu + cosw * sinu) * sini;
 
-    // Скорости в ECI (переводим из км/мин в км/с)
-    double vx = (rdot * (cosO * coso - sinO * sino * cosi) -
-                 r * rfdot * (cosO * sino + sinO * coso * cosi)) / 60.0;
-    double vy = (rdot * (sinO * coso + cosO * sino * cosi) +
-                 r * rfdot * (cosO * coso - sinO * sino * cosi)) / 60.0;
-    double vz = (rdot * sino * sini + r * rfdot * coso * sini) / 60.0;
+    pos = QVector3D(x, y, z) * xkmper;
 
-    vel.setX(vx);
-    vel.setY(vy);
-    vel.setZ(vz);
+    // Скорость (в км/с)
+    double vx = ((-cosnode * cosw + sinnode * sinw * cosi) * sinu * rdot +
+                 (-cosnode * sinw - sinnode * cosw * cosi) * cosu * rfdot) / 60.0;
+    double vy = ((-sinnode * cosw - cosnode * sinw * cosi) * sinu * rdot +
+                 (-sinnode * sinw + cosnode * cosw * cosi) * cosu * rfdot) / 60.0;
+    double vz = (sinw * sinu * rdot + cosw * cosu * rfdot) * sini / 60.0;
+
+    vel = QVector3D(vx, vy, vz) * xkmper;
 
     qDebug() << "\nFinal ECI coordinates:";
     qDebug() << "Position (km):" << pos;

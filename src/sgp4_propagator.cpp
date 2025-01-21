@@ -7,6 +7,7 @@ SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
 
 void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
     // Преобразование базовых элементов
+    elements_.epoch = tle.epoch;
     sgp4_.i = tle.inclination * DE2RA;
     sgp4_.Omega = tle.right_ascension * DE2RA;
     sgp4_.e = tle.eccentricity;

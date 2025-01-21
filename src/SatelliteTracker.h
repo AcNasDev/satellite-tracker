@@ -67,7 +67,7 @@ private slots:
 
         qDebug() << "libsgp4 results:";
         qDebug() << "\nCurrent satellite position (UTC):" << now.toString("yyyy-MM-dd HH:mm:ss");
-        qDebug() << "ECF coordinates (km):";
+        qDebug() << "ECI coordinates (km):";
         qDebug() << "X:" << QString::number(eci.Position().x, 'f', 3);
         qDebug() << "Y:" << QString::number(eci.Position().y, 'f', 3);
         qDebug() << "Z:" << QString::number(eci.Position().z, 'f', 3);

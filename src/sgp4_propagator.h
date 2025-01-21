@@ -30,31 +30,47 @@ public:
     static GeodeticCoords eci2geodetic(const QVector3D& eci_pos, const QDateTime& time);
 
 private:
-    // Константы
     static constexpr double XKE = 7.43669161e-2;
     static constexpr double CK2 = 5.413080e-4;
     static constexpr double CK4 = 0.62098875e-6;
-    static constexpr double XKMPER = 6378.135;         // Earth radius km
+    static constexpr double XKMPER = 6378.135;          // Earth radius km
     static constexpr double AE = 1.0;
-    static constexpr double XMNPDA = 1440.0;          // Minutes per day
-    static constexpr double OMEGA_E = 7.29211514670698e-5;  // Earth rotation rate rad/s
-    static constexpr double TWOPI = 2.0 * M_PI;
-    static constexpr double E6A = 1.0e-6;
-    static constexpr double TOTHRD = 2.0/3.0;
+    static constexpr double DE2RA = 0.174532925e-1;     // π/180
+    static constexpr double MINUTES_PER_DAY = 1440.0;
+    static constexpr double OMEGA_E = 7.29211514670698e-5; // Earth rotation rad/s
+    static constexpr double QOMS2T = 1.880279e-09;
+    static constexpr double S = 1.01222928;
 
-    struct DeepSpaceElements {
-        double aodp, cosio, sinio, omgdot, xnodot, xmdot;
-        double xnodp, theta2, x3thm1, xlcof, aycof;
-        double x1mth2, xmdot_factor, omgdot_factor, xnodot_factor;
+    struct SGP4Elements {
+        double a;          // Semi-major axis (Earth radii)
+        double e;          // Eccentricity
+        double i;          // Inclination (radians)
+        double omega;      // Argument of perigee (radians)
+        double Omega;      // Right ascension (radians)
+        double M;          // Mean anomaly (radians)
+        double n;          // Mean motion (radians/minute)
+        double bstar;      // Drag term
+
+        // Вспомогательные элементы
+        double n0;         // Original mean motion
+        double a0;         // Original semi major axis
+        double ndot;       // First time derivative of mean motion
+        double nddot;      // Second time derivative of mean motion
     };
 
-    DeepSpaceElements deep_;
+    SGP4Elements sgp4_;
 
     // Вспомогательные функции
-    static double FMod2p(double x) {
-        double rv = fmod(x, TWOPI);
-        if (rv < 0.0) rv += TWOPI;
-        return rv;
+    static double Kepler(double MeanAnomaly, double Eccentricity) {
+        double E = MeanAnomaly;
+        double delta;
+        int iter = 0;
+        do {
+            delta = E - Eccentricity * sin(E) - MeanAnomaly;
+            E = E - delta / (1.0 - Eccentricity * cos(E));
+            iter++;
+        } while (fabs(delta) > 1e-12 && iter < 10);
+        return E;
     }
 
     struct OrbitalElements {

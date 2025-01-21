@@ -6,41 +6,45 @@ SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
 }
 
 void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
-    elements_.inclination = tle.inclination * M_PI / 180.0;
-    elements_.right_ascension = tle.right_ascension * M_PI / 180.0;
-    elements_.eccentricity = tle.eccentricity;
-    elements_.arg_perigee = tle.argument_perigee * M_PI / 180.0;
-    elements_.mean_anomaly = tle.mean_anomaly * M_PI / 180.0;
-    elements_.mean_motion = tle.mean_motion * TWOPI / XMNPDA;
-    elements_.bstar = tle.bstar;
-    elements_.epoch = tle.epoch;
+    // Преобразование базовых элементов
+    sgp4_.i = tle.inclination * DE2RA;
+    sgp4_.Omega = tle.right_ascension * DE2RA;
+    sgp4_.e = tle.eccentricity;
+    sgp4_.omega = tle.argument_perigee * DE2RA;
+    sgp4_.M = tle.mean_anomaly * DE2RA;
+    sgp4_.n0 = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
+    sgp4_.bstar = tle.bstar;
 
-    // Инициализация глубоких элементов
-    deep_.cosio = cos(elements_.inclination);
-    deep_.sinio = sin(elements_.inclination);
-    deep_.theta2 = deep_.cosio * deep_.cosio;
-    deep_.x3thm1 = 3.0 * deep_.theta2 - 1.0;
-    const double eosq = elements_.eccentricity * elements_.eccentricity;
-    const double betao2 = 1.0 - eosq;
-    const double betao = sqrt(betao2);
+    // Вычисление производных элементов
+    const double cos_i = cos(sgp4_.i);
+    const double theta2 = cos_i * cos_i;
+    const double x3thm1 = 3.0 * theta2 - 1.0;
+    const double e2 = sgp4_.e * sgp4_.e;
+    const double beta02 = 1.0 - e2;
+    const double beta0 = sqrt(beta02);
 
-    // Инициализация SGP4
-    const double a1 = pow(XKE / elements_.mean_motion, TOTHRD);
-    const double del1 = 1.5 * CK2 * deep_.x3thm1 / (a1 * a1 * betao * betao2);
-    const double ao = a1 * (1.0 - del1 * (0.5 + del1 * (1.0 + 134.0/81.0 * del1)));
-    const double delo = 1.5 * CK2 * deep_.x3thm1 / (ao * ao * betao * betao2);
+    // Коррекция для SGP4
+    const double a1 = pow(XKE / sgp4_.n0, 2.0/3.0);
+    const double del1 = 1.5 * CK2 * x3thm1 / (a1 * a1 * beta02);
+    sgp4_.a0 = a1 * (1.0 - del1 * (1.0/3.0 + del1 * (1.0 + 134.0/81.0 * del1)));
+    const double del0 = 1.5 * CK2 * x3thm1 / (sgp4_.a0 * sgp4_.a0 * beta02);
 
-    deep_.aodp = ao;
-    deep_.xnodp = elements_.mean_motion / (1.0 + delo);
+    // Обновление mean motion
+    sgp4_.n = sgp4_.n0 / (1.0 + del0);
+    sgp4_.a = sgp4_.a0;
 
-    // Расчет секулярных эффектов
-    deep_.omgdot_factor = -1.5 * CK2 * deep_.xnodp * deep_.sinio * deep_.cosio / betao2;
-    deep_.xnodot_factor = deep_.omgdot_factor * deep_.cosio;
-    deep_.xmdot_factor = deep_.xnodp + 0.5 * deep_.omgdot_factor * elements_.eccentricity * deep_.sinio;
+    // Вычисление secular effects
+    const double aux = 1.0 - theta2;
+    const double sinio = sin(sgp4_.i);
+    const double cosio = cos(sgp4_.i);
+    const double x7thm1 = 7.0 * theta2 - 1.0;
 
-    // Инициализация коэффициентов для долгопериодических возмущений
-    deep_.xlcof = 0.125 * CK2 * deep_.sinio * (3.0 + 5.0 * deep_.cosio) / (1.0 + deep_.cosio);
-    deep_.aycof = 0.25 * CK2 * deep_.sinio;
+    const double c1 = CK2 * 1.5;
+    const double c4 = 2.0 * (sgp4_.a0 * sgp4_.a0 * beta02 * beta02);
+    const double c5 = 2.0 * c1 * sgp4_.a0 * beta02;
+
+    sgp4_.ndot = -c1 * sgp4_.n * x3thm1 / (sgp4_.a0 * beta02);
+    sgp4_.nddot = -sgp4_.n * c1 * (sgp4_.n / (sgp4_.a0 * beta02)) * (-7.0/2.0 + 19.0/4.0 * theta2 + 2.0 * theta2 * theta2);
 }
 
 SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
@@ -51,58 +55,53 @@ SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& tim
     const double tsince = elements_.epoch.secsTo(time) / 60.0;
 
     // Обновление средних элементов
-    const double xmp = elements_.mean_anomaly + deep_.xmdot_factor * tsince;
-    const double omgadf = elements_.arg_perigee + deep_.omgdot_factor * tsince;
-    const double xnode = elements_.right_ascension + deep_.xnodot_factor * tsince;
+    const double M = sgp4_.M + sgp4_.n * tsince;
+    const double omega = sgp4_.omega + 0.75 * CK2 * sgp4_.n * tsince * cos(sgp4_.i) / sqrt(1.0 - sgp4_.e * sgp4_.e);
+    const double Omega = sgp4_.Omega - 1.5 * CK2 * sgp4_.n * tsince * cos(sgp4_.i) / sqrt(1.0 - sgp4_.e * sgp4_.e);
 
     // Решение уравнения Кеплера
-    double E = xmp;
-    double delE;
-    for(int i = 0; i < 10; i++) {
-        delE = (E - elements_.eccentricity * sin(E) - xmp) /
-               (1.0 - elements_.eccentricity * cos(E));
-        E -= delE;
-        if(fabs(delE) < 1e-12) break;
-    }
+    const double E = Kepler(M, sgp4_.e);
+    const double sin_E = sin(E);
+    const double cos_E = cos(E);
 
-    // Вычисление позиции в орбитальной плоскости
-    const double sinE = sin(E);
-    const double cosE = cos(E);
+    // True anomaly
+    const double sin_v = (sqrt(1.0 - sgp4_.e * sgp4_.e) * sin_E) / (1.0 - sgp4_.e * cos_E);
+    const double cos_v = (cos_E - sgp4_.e) / (1.0 - sgp4_.e * cos_E);
 
-    const double sinv = (sqrt(1.0 - elements_.eccentricity * elements_.eccentricity) * sinE) /
-                        (1.0 - elements_.eccentricity * cosE);
-    const double cosv = (cosE - elements_.eccentricity) / (1.0 - elements_.eccentricity * cosE);
+    // Position in orbital plane
+    const double r = sgp4_.a * (1.0 - sgp4_.e * cos_E);
+    const double v = atan2(sin_v, cos_v);
 
-    const double r = deep_.aodp * (1.0 - elements_.eccentricity * cosE);
-    const double rdot = deep_.xnodp * deep_.aodp * elements_.eccentricity * sinE / sqrt(1.0 - elements_.eccentricity * elements_.eccentricity);
-    const double rfdot = deep_.xnodp * deep_.aodp * sqrt(1.0 - elements_.eccentricity * elements_.eccentricity) / r;
+    // Orientation vectors
+    const double sin_omega = sin(omega);
+    const double cos_omega = cos(omega);
+    const double sin_Omega = sin(Omega);
+    const double cos_Omega = cos(Omega);
+    const double sin_i = sin(sgp4_.i);
+    const double cos_i = cos(sgp4_.i);
 
-    // Ориентация
-    const double cosomg = cos(omgadf);
-    const double sinomg = sin(omgadf);
-    const double cosnod = cos(xnode);
-    const double sinnod = sin(xnode);
-
-    // Позиция и скорость в ECI
-    const double xmx = r * (cosomg * cosv - sinomg * sinv);
-    const double xmy = r * (sinomg * cosv + cosomg * sinv);
+    // Position vector (in km)
+    const double x = r * (cos_omega * cos_v - sin_omega * sin_v);
+    const double y = r * (sin_omega * cos_v + cos_omega * sin_v);
 
     state.position = QVector3D(
-        XKMPER * (xmx * cosnod - xmy * sinnod * deep_.cosio),
-        XKMPER * (xmx * sinnod + xmy * cosnod * deep_.cosio),
-        XKMPER * xmy * deep_.sinio
+        XKMPER * (x * cos_Omega - y * cos_i * sin_Omega),
+        XKMPER * (x * sin_Omega + y * cos_i * cos_Omega),
+        XKMPER * y * sin_i
         );
 
-    // Преобразование скорости в км/с
-    const double vx = rdot * (cosomg * cosv - sinomg * sinv) -
-                      rfdot * (cosomg * sinv + sinomg * cosv);
-    const double vy = rdot * (sinomg * cosv + cosomg * sinv) -
-                      rfdot * (sinomg * sinv - cosomg * cosv);
+    // Velocity calculation
+    const double mu = XKE * XKE;
+    const double n = sqrt(mu / (r * r * r));
+    const double rdot = sqrt(mu / sgp4_.a) * sgp4_.e * sin_E / r;
+    const double rfdot = sqrt(mu * sgp4_.a) * sqrt(1 - sgp4_.e * sgp4_.e) / r;
 
     state.velocity = QVector3D(
-        (XKMPER/60.0) * (vx * cosnod - vy * sinnod * deep_.cosio),
-        (XKMPER/60.0) * (vx * sinnod + vy * cosnod * deep_.cosio),
-        (XKMPER/60.0) * vy * deep_.sinio
+        (XKMPER/60.0) * (-sin_Omega * (rdot * cos_v - rfdot * sin_v) -
+                           cos_Omega * (rdot * sin_v + rfdot * cos_v) * cos_i),
+        (XKMPER/60.0) * (cos_Omega * (rdot * cos_v - rfdot * sin_v) -
+                           sin_Omega * (rdot * sin_v + rfdot * cos_v) * cos_i),
+        (XKMPER/60.0) * (rdot * sin_v + rfdot * cos_v) * sin_i
         );
 
     return state;

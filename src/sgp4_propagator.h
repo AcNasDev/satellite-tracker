@@ -15,7 +15,7 @@ public:
     };
 
     explicit SGP4Propagator(const TLEParser::TLEData& tle);
-    OrbitalState calculateState(const QDateTime& time) const;
+    OrbitalState calculateState(const QDateTime& time);
 
 private:
     // Константы SGP4
@@ -50,8 +50,8 @@ private:
     };
 
     void initParameters(const TLEParser::TLEData& tle);
-    void propagate(double tsince, QVector3D& pos, QVector3D& vel) const;
-    double solveKepler(double M, double e) const;
+    void propagate(double tsince, QVector3D& pos, QVector3D& vel);
+    double solveKepler(double M, double e);
 
     Elements elements_;
     QDateTime epoch_;

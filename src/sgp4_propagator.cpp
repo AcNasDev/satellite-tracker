@@ -62,20 +62,21 @@ void SGP4Propagator::initParameters(const TLEParser::TLEData& tle) {
     qDebug() << "Perigee height (ER):" << elements_.altp;
 }
 
-void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) const {
+void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
     qDebug() << "\nPropagating for tsince =" << tsince << "minutes";
 
     // Вековые возмущения
     double xn = elements_.no_kozai;
     double em = elements_.ecco;
-    double xmam = elements_.mo;
+    double xinc = elements_.inclo;
 
     // Учет вековых возмущений
     double xnoddf = elements_.ndot * tsince * 2.0;
     double omega = elements_.argpo;
     double xnode = elements_.nodeo + xnoddf;
     double e = em - elements_.bstar * tsince;
-    double xmp = xmam + xn * tsince + xnoddf/2.0;
+    e = qMax(1.0e-6, qMin(0.999999, e));
+    double xmp = elements_.mo + xn * tsince + xnoddf/2.0;
 
     qDebug() << "Secular perturbations:";
     qDebug() << "Mean motion (rad/min):" << xn;
@@ -100,8 +101,8 @@ void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) co
     qDebug() << "rfdot (rad/min):" << rfdot;
 
     // Вычисление координат в ECI
-    double sin_i = sin(elements_.inclo);
-    double cos_i = cos(elements_.inclo);
+    double sin_i = sin(xinc);
+    double cos_i = cos(xinc);
     double sin_node = sin(xnode);
     double cos_node = cos(xnode);
     double sin_u = sin(U + omega);
@@ -122,74 +123,7 @@ void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) co
     qDebug() << "Velocity (km/s):" << vel;
 }
 
-void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) const {
-    // Обновление среднего движения
-    double xn = elements_.no + elements_.ndot * tsince + elements_.nddot * tsince * tsince * 0.5;
-
-    // Обновление эксцентриситета с учетом торможения
-    double e = elements_.e - elements_.bstar * tsince;
-    e = qMax(1.0e-6, qMin(0.999999, e));
-
-    // Вековые возмущения
-    double xmp = elements_.M + xn * tsince;
-    double omega = elements_.omega + 0.75 * k2 * xn * tsince * cos(elements_.i) /
-                                         (elements_.a * (1.0 - e * e));
-    double xnode = elements_.Omega - 1.5 * k2 * xn * tsince * cos(elements_.i) /
-                                         (elements_.a * (1.0 - e * e));
-
-    // Решение уравнения Кеплера
-    double xl = xmp + omega;
-    double E = solveKepler(xl - xnode, e);
-
-    // Вычисление позиции в орбитальной плоскости
-    double sinu = sin(E);
-    double cosu = cos(E);
-    double r = elements_.a * (1.0 - e * cosu);
-    double u = atan2(sqrt(1.0 - e * e) * sinu, cosu - e);
-
-    // Скорости в орбитальной плоскости
-    double rdot = xke * e * sinu * sqrt(1.0/r);
-    double rfdot = xke * sqrt((1.0 - e * e)/r);
-
-    // Преобразование в ECI
-    pos = getPosition(r, u + omega, xnode, elements_.i);
-    vel = getVelocity(r, rdot, u + omega, rfdot, xnode, elements_.i);
-}
-
-QVector3D SGP4Propagator::getPosition(double r, double u, double Omega, double i) const {
-    double sin_u = sin(u);
-    double cos_u = cos(u);
-    double sin_Omega = sin(Omega);
-    double cos_Omega = cos(Omega);
-    double sin_i = sin(i);
-    double cos_i = cos(i);
-
-    return QVector3D(
-        r * (cos_u * cos_Omega - sin_u * sin_Omega * cos_i) * xkmper,
-        r * (cos_u * sin_Omega + sin_u * cos_Omega * cos_i) * xkmper,
-        r * sin_u * sin_i * xkmper
-        );
-}
-
-QVector3D SGP4Propagator::getVelocity(double r, double rdot, double u, double rfdot,
-                                      double Omega, double i) const {
-    double sin_u = sin(u);
-    double cos_u = cos(u);
-    double sin_Omega = sin(Omega);
-    double cos_Omega = cos(Omega);
-    double sin_i = sin(i);
-    double cos_i = cos(i);
-
-    return QVector3D(
-        ((rdot * cos_u - r * rfdot * sin_u) * cos_Omega -
-         (rdot * sin_u + r * rfdot * cos_u) * sin_Omega * cos_i) * xkmper / 60.0,
-        ((rdot * cos_u - r * rfdot * sin_u) * sin_Omega +
-         (rdot * sin_u + r * rfdot * cos_u) * cos_Omega * cos_i) * xkmper / 60.0,
-        (rdot * sin_u + r * rfdot * cos_u) * sin_i * xkmper / 60.0
-        );
-}
-
-double SGP4Propagator::solveKepler(double M, double e) const {
+double SGP4Propagator::solveKepler(double M, double e) {
     double E = M;
     for(int i = 0; i < 10; i++) {
         double E_old = E;
@@ -199,10 +133,11 @@ double SGP4Propagator::solveKepler(double M, double e) const {
     return E;
 }
 
-SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
+SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) {
     OrbitalState state;
     state.epoch = time;
     double tsince = epoch_.msecsTo(time) / (1000.0 * 60.0);
     propagate(tsince, state.position, state.velocity);
     return state;
 }
+

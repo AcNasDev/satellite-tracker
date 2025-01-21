@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)  # Включаем автоматическую поддержку MOC
+set(CMAKE_AUTOUIC ON)  # Включаем автоматическую поддержку UIC
+set(CMAKE_AUTORCC ON)  # Включаем автоматическую поддержку RCC
 
 # Настройки компилятора
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -13,7 +15,7 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 # Находим Qt
-find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 
 # Скачиваем SGP4 если его нет
 include(FetchContent)
@@ -33,17 +35,23 @@ endif()
 # Исходные файлы
 set(SOURCES
     src/main.cpp
+    src/tle_parser.cpp
 )
 
 set(HEADERS
     src/SatelliteTracker.h
+    src/tle_parser.h
 )
 
 # Добавляем исполняемый файл
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS}
+    src/sgp4_propagator.h src/sgp4_propagator.cpp
+    src/coordinate_converter.h src/coordinate_converter.cpp
+     )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
+    Qt6::Gui
     sgp4
 )
 

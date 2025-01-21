@@ -94,6 +94,8 @@ void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
     elements_.e = elements_.ecco - elements_.bstar * tsince;
     elements_.e = qMax(1.0e-6, qMin(0.999999, elements_.e));
 
+    double betao2 = 1.0 - elements_.e * elements_.e;
+    double betao = sqrt(betao2);
     double xmp = elements_.mo + xn * tsince;
     double omega = elements_.argpo + 0.75 * ck2 * sin(elements_.inclo) *
                                          xn * tsince / (elements_.no * betao2);

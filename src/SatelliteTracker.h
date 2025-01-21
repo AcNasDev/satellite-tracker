@@ -39,6 +39,7 @@ public:
             QTimer* timer = new QTimer(this);
             connect(timer, &QTimer::timeout, this, &SatelliteTracker::updatePosition);
             timer->start(1000);
+            timer->setSingleShot(true);
 
             updatePosition();
 

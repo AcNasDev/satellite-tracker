@@ -30,22 +30,20 @@ public:
     static GeodeticCoords eci2geodetic(const QVector3D& eci_pos, const QDateTime& time);
 
 private:
-    // WGS-72 константы
-    static constexpr double XKE = 7.43669161E-2;
-    static constexpr double CK2 = 5.413080E-4;
-    static constexpr double CK4 = 0.62098875E-6;
-    static constexpr double QOMS2T = 1.880279E-09;
-    static constexpr double S = 1.01222928;
-    static constexpr double XKMPER = 6378.135;    // радиус Земли в км
-    static constexpr double AE = 6378.135;              // км (экваториальный радиус)
-    static constexpr double KE = 7.43669161E-2;         // корень из GM
-    static constexpr double DE2RA = 0.174532925E-1;
+    // WGS-72 constants
+    static constexpr double XKE = 7.43669161e-2;        // sqrt(GM) ER^3/min
+    static constexpr double CK2 = 5.413080e-4;          // (1/2)J2AE^2
+    static constexpr double CK4 = 0.62098875e-6;        // -(3/8)J4AE^4
+    static constexpr double QOMS2T = 1.880279e-09;
+    static constexpr double AE = 1.0;                   // Distance units/earth radii
+    static constexpr double XKMPER = 6378.135;          // Earth radius km
     static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double MU = 398600.8;        // гравитационный параметр Земли
-    static constexpr double XPDOTP = 1440.0 / (2.0 * M_PI); // минут на оборот
-    static constexpr double EARTH_RADIUS = 6378.135;    // км
-    static constexpr double EARTH_FLATTENING = 1.0/298.257223563;
-    static constexpr double EARTH_ROTATION_RATE = 7.2921150e-5; // рад/с
+    static constexpr double OMEGA_E = 7.29211514670698e-5; // Earth rotation rad/s
+    static constexpr double XJ3 = -2.53881e-6;         // J3 harmonic
+    static constexpr double EARTH_MU = 398600.4418;     // Earth gravitational constant
+
+    static constexpr double AE_TO_KM = XKMPER;
+    static constexpr double TIME_TO_SEC = 60.0;         // Convert minutes to seconds
 
     struct OrbitalElements {
         double inclination;     // радианы

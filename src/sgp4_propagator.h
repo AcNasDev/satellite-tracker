@@ -27,53 +27,33 @@ private:
     static constexpr double AE = 1.0;
     static constexpr double DE2RA = M_PI / 180.0;
     static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double J2 = 0.00108262998905;
-    static constexpr double J3 = -0.00000253215306;
-    static constexpr double J4 = -0.00000161098761;
-    static constexpr double KE = 0.0743669161331734049;
-    static constexpr double QOMS2T = 1.880279e-09;
+    static constexpr double SQRT_GM = 0.0743669161331734049; // sqrt(GM) in ER^(3/2)/min
 
-    struct Elements {
+    struct OrbitalElements {
         // Основные элементы
-        double i;              // Наклонение (рад)
-        double Omega;          // Долгота восходящего узла (рад)
-        double e;              // Эксцентриситет
-        double omega;          // Аргумент перигея (рад)
-        double M;              // Средняя аномалия (рад)
-        double n;              // Среднее движение (рад/мин)
-        double bstar;          // Баллистический коэффициент
-        QDateTime epoch;       // Эпоха
+        double inclo;    // Наклонение (рад)
+        double nodeo;    // RA восходящего узла (рад)
+        double ecco;     // Эксцентриситет
+        double argpo;    // Аргумент перигея (рад)
+        double mo;       // Средняя аномалия (рад)
+        double no;       // Среднее движение (рад/мин)
+        double bstar;    // Баллистический коэффициент
 
-        // Производные элементы
-        double a;              // Большая полуось (земные радиусы)
-        double n0;             // Начальное среднее движение
-        double e0;             // Начальный эксцентриситет
-        double cosio;          // cos(i)
-        double sinio;          // sin(i)
-        double eta;            // sqrt(1 - e^2)
-        double coef;           // Коэффициент для атмосферного сопротивления
-        double C1;             // Коэффициент для J2
-        double C4;             // Коэффициент для возмущений
-        double x3thm1;         // 3 * cosio^2 - 1
-        double x1mth2;         // 1 - cosio^2
-        double xmdot;          // Скорость изменения средней аномалии
-        double omgdot;         // Скорость изменения аргумента перигея
-        double xnodot;         // Скорость изменения долготы восходящего узла
-        double xnodcf;         // = 3.5 * beta0 * C1
-        double t2cof;          // = 1.5 * C1
-        double aodp;           // Параметр орбиты
-        double beta0;          // = sqrt(1 - e^2)
+        // Вспомогательные элементы
+        double a;        // Большая полуось (земные радиусы)
+        double alta;     // Апогей (км)
+        double altp;     // Перигей (км)
+        double jdsatepoch; // Юлианская дата эпохи
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    void updateForSecularEffects(double tsince, double& xll,
-                                 double& omgasm, double& xnodes,
-                                 double& em, double& xinc, double& xn) const;
-    void updateForPeriodicEffects(double& em, double& xinc, double& omgasm,
-                                  double& xnodes, double& xll, double tsince) const;
-    void solveKeplerEquation(double& xll, double e) const;
+    void sgp4init();
+    void sgp4(double tsince, QVector3D& pos, QVector3D& vel) const;
+    void rv2coe(const QVector3D& pos, const QVector3D& vel, double& a, double& e,
+                double& i, double& omega, double& argp, double& nu) const;
 
-    Elements elements_;
+    OrbitalElements elements_;
+    QDateTime epoch_;
 };
 
 #endif // SGP4_PROPAGATOR_H

@@ -58,7 +58,7 @@ private:
 
     void initParameters(const TLEParser::TLEData& tle);
     void calculateDerivatives();
-    void propagate(double tsince, QVector3D& pos, QVector3D& vel) const;
+    void propagate(double tsince, QVector3D& pos, QVector3D& vel);
     double solveKepler(double mean_anomaly, double ecc) const;
 
     Elements elements_;

@@ -85,7 +85,7 @@ double SGP4Propagator::solveKepler(double mean_anomaly, double ecc) const {
     return E;
 }
 
-void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) const {
+void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
     qDebug() << "\nPropagating for tsince =" << tsince << "minutes";
 
     // Учет вековых возмущений

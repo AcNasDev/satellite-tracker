@@ -6,6 +6,7 @@
 #include "tle_parser.h"
 #include <QVector3D>
 #include <QDateTime>
+#include <QDebug>
 
 class SGP4Propagator {
 public:
@@ -19,15 +20,13 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // Константы SGP4
-    static constexpr double ke = 7.43669161e-2;        // sqrt(GM) ER^(3/2)/min
-    static constexpr double k2 = 5.413080e-4;          // J2/2
-    static constexpr double k4 = 0.62098875e-6;        // -3J4/8
-    static constexpr double a3ovk2 = -1.0 / 3.0;       // J3/(3*J2)
-    static constexpr double xkmper = 6378.137;         // Радиус Земли в км
-    static constexpr double min_per_day = 1440.0;      // Минут в сутках
-    static constexpr double ae = 1.0;                  // Расстояние в радиусах Земли
-    static constexpr double de2ra = M_PI / 180.0;      // Градусы в радианы
+    static constexpr double ke = 7.43669161e-2;
+    static constexpr double k2 = 5.413080e-4;
+    static constexpr double k4 = 0.62098875e-6;
+    static constexpr double xkmper = 6378.137;
+    static constexpr double min_per_day = 1440.0;
+    static constexpr double ae = 1.0;
+    static constexpr double de2ra = M_PI / 180.0;
 
     struct Elements {
         double inclo;     // Наклонение (рад)
@@ -38,24 +37,18 @@ private:
         double no;        // Среднее движение (рад/мин)
         double bstar;     // Баллистический коэффициент
 
-        // Производные элементы
-        double a;         // Большая полуось (ER)
-        double ndot;      // Изменение среднего движения (рад/мин^2)
-        double nddot;     // Вторая производная среднего движения (рад/мин^3)
-        double alta;      // Высота апогея (км)
-        double altp;      // Высота перигея (км)
-        double del1;      // Первая поправка к большой полуоси
-        double del2;      // Вторая поправка к большой полуоси
-        double del3;      // Третья поправка к большой полуоси
-        double xincl;     // Наклонение с учетом возмущений
-        double xnodp;     // Узел с учетом возмущений
-        double aodp;      // Большая полуось с учетом возмущений
-        double ao, delo;  // Оригинальные элементы
+        // Вспомогательные элементы
+        double a;         // Большая полуось (км)
+        double n;         // Скорректированное среднее движение
+        double e;         // Скорректированный эксцентриситет
+        double i;         // Скорректированное наклонение
+        double omega;     // Скорректированный аргумент перигея
+        double Omega;     // Скорректированная долгота узла
     };
 
     void initParameters(const TLEParser::TLEData& tle);
-    void calculateDerivatives();
     void propagate(double tsince, QVector3D& pos, QVector3D& vel) const;
+    void debugElements() const;
 
     Elements elements_;
     QDateTime epoch_;

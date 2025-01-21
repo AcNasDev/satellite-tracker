@@ -4,7 +4,6 @@
 
 SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
     initParameters(tle);
-    calculateDerivatives();
 }
 
 void SGP4Propagator::initParameters(const TLEParser::TLEData& tle) {
@@ -12,117 +11,102 @@ void SGP4Propagator::initParameters(const TLEParser::TLEData& tle) {
 
     qDebug() << "\n=== SGP4 Initialization ===";
 
-    // Преобразование основных элементов
-    elements_.inclo = tle.inclination * de2ra;
-    elements_.nodeo = tle.right_ascension * de2ra;
-    elements_.ecco = tle.eccentricity;
-    elements_.argpo = tle.argument_perigee * de2ra;
-    elements_.mo = tle.mean_anomaly * de2ra;
+    // Конвертация базовых элементов
+    elements_.io = tle.inclination * de2ra;
+    elements_.eo = tle.eccentricity;
+    elements_.omegao = tle.argument_perigee * de2ra;
+    elements_.xnodeo = tle.right_ascension * de2ra;
+    elements_.xmo = tle.mean_anomaly * de2ra;
     elements_.no = tle.mean_motion * 2.0 * M_PI / min_per_day;
     elements_.bstar = tle.bstar;
 
-    qDebug() << "Initial TLE elements:";
-    qDebug() << "Inclination (rad):" << elements_.inclo;
-    qDebug() << "RAAN (rad):" << elements_.nodeo;
-    qDebug() << "Eccentricity:" << elements_.ecco;
-    qDebug() << "Arg of perigee (rad):" << elements_.argpo;
-    qDebug() << "Mean anomaly (rad):" << elements_.mo;
-    qDebug() << "Mean motion (rad/min):" << elements_.no;
-    qDebug() << "BSTAR:" << elements_.bstar;
+    qDebug() << "Raw TLE elements:";
+    qDebug() << "io (rad):" << elements_.io;
+    qDebug() << "eo:" << elements_.eo;
+    qDebug() << "omegao (rad):" << elements_.omegao;
+    qDebug() << "xnodeo (rad):" << elements_.xnodeo;
+    qDebug() << "xmo (rad):" << elements_.xmo;
+    qDebug() << "no (rad/min):" << elements_.no;
+    qDebug() << "bstar:" << elements_.bstar;
 
     // Вспомогательные величины
-    double theta2 = cos(elements_.inclo) * cos(elements_.inclo);
+    double cosio = cos(elements_.io);
+    double theta2 = cosio * cosio;
     double x3thm1 = 3.0 * theta2 - 1.0;
-    double eosq = elements_.ecco * elements_.ecco;
+    double eosq = elements_.eo * elements_.eo;
     double betao2 = 1.0 - eosq;
     double betao = sqrt(betao2);
+
+    // Восстановление оригинальной средней движения (no) и полуоси (a)
+    double a1 = pow(ke / elements_.no, tothrd);
+    double del1 = 1.5 * ck2 * x3thm1 / (a1 * a1 * betao * betao2);
+    double ao = a1 * (1.0 - del1 * (0.5 * tothrd + del1 * (1.0 + 134.0/81.0 * del1)));
+    double delo = 1.5 * ck2 * x3thm1 / (ao * ao * betao * betao2);
+    double xnodp = elements_.no / (1.0 + delo);
+    elements_.a = ao;
+
+    // Инициализация для SGP4
+    elements_.inclo = elements_.io;
+    elements_.nodeo = elements_.xnodeo;
+    elements_.argpo = elements_.omegao;
+    elements_.mo = elements_.xmo;
+
+    // Вычисление производных среднего движения
     double temp = 1.5 * ck2 * x3thm1 / (betao * betao2);
+    elements_.ndot = -temp * xnodp * (1.0 + 4.0 * betao);
+    elements_.nddot = -temp * elements_.ndot;
 
-    // Восстановление оригинального среднего движения
-    double a1 = pow(xke / elements_.no, 2.0/3.0);
-    elements_.del1 = temp / (a1 * a1);
-    double ao = a1 * (1.0 - elements_.del1 * (1.0/3.0 + elements_.del1 *
-                                                              (1.0 + 134.0/81.0 * elements_.del1)));
-    elements_.del2 = temp / (ao * ao);
-    elements_.no = elements_.no / (1.0 + elements_.del1);
-    elements_.a = ao / (1.0 - elements_.del1);
-
-    // Вычисление периода
-    elements_.alta = elements_.a * (1.0 + elements_.ecco) - 1.0;
-    elements_.altp = elements_.a * (1.0 - elements_.ecco) - 1.0;
+    // Сохраняем среднее движение Козаи
+    elements_.no_kozai = xnodp;
 
     qDebug() << "\nDerived elements:";
     qDebug() << "Semi-major axis (ER):" << elements_.a;
-    qDebug() << "Corrected mean motion (rad/min):" << elements_.no;
-    qDebug() << "Apogee height (ER):" << elements_.alta;
-    qDebug() << "Perigee height (ER):" << elements_.altp;
-}
-
-void SGP4Propagator::calculateDerivatives() {
-    double theta2 = cos(elements_.inclo) * cos(elements_.inclo);
-    double x3thm1 = 3.0 * theta2 - 1.0;
-    double eosq = elements_.ecco * elements_.ecco;
-    double betao2 = 1.0 - eosq;
-    double betao = sqrt(betao2);
-    double temp1 = 1.5 * ck2 * x3thm1 / (betao * betao2);
-    double temp2 = temp1 / elements_.a;
-
-    elements_.ndot = -temp2 * elements_.no * (1.0 + 1.5 * elements_.ecco);
-    elements_.nddot = -temp2 * elements_.ndot;
-
-    qDebug() << "Motion derivatives:";
+    qDebug() << "Mean motion (Kozai, rad/min):" << elements_.no_kozai;
     qDebug() << "ndot (rad/min²):" << elements_.ndot;
     qDebug() << "nddot (rad/min³):" << elements_.nddot;
 }
 
-double SGP4Propagator::solveKepler(double mean_anomaly, double ecc) {
-    double E = mean_anomaly;
-    for(int i = 0; i < 10; i++) {
-        double E_old = E;
-        E = mean_anomaly + ecc * sin(E);
-        if(fabs(E - E_old) < 1.0e-12) break;
-    }
-    return E;
-}
-
-void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
+void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) const {
     qDebug() << "\nPropagating for tsince =" << tsince << "minutes";
 
-    // Учет вековых возмущений
-    double xn = elements_.no + elements_.ndot * tsince +
-                elements_.nddot * tsince * tsince / 2.0;
-    elements_.e = elements_.ecco - elements_.bstar * tsince;
-    elements_.e = qMax(1.0e-6, qMin(0.999999, elements_.e));
+    // Вековые возмущения
+    double xmp = elements_.mo + elements_.no_kozai * tsince;
+    double omega = elements_.argpo + 0.75 * ck2 * elements_.no_kozai * tsince *
+                                         cos(elements_.inclo) / (elements_.a * elements_.a * (1.0 - elements_.eo * elements_.eo));
+    double xnode = elements_.nodeo - 1.5 * ck2 * elements_.no_kozai * tsince *
+                                         cos(elements_.inclo) / (elements_.a * elements_.a * (1.0 - elements_.eo * elements_.eo));
 
-    double betao2 = 1.0 - elements_.e * elements_.e;
-    double betao = sqrt(betao2);
-    double xmp = elements_.mo + xn * tsince;
-    double omega = elements_.argpo + 0.75 * ck2 * sin(elements_.inclo) *
-                                         xn * tsince / (elements_.no * betao2);
-    double xnode = elements_.nodeo - 1.5 * ck2 * cos(elements_.inclo) *
-                                         xn * tsince / (elements_.no * betao2);
+    // Обновление эксцентриситета
+    double e = elements_.eo - elements_.bstar * elements_.no_kozai * tsince *
+                                  (1.0 - elements_.eo * elements_.eo);
+    e = qMax(1.0e-6, qMin(0.999999, e));
 
     qDebug() << "Secular perturbations:";
-    qDebug() << "Mean motion (rad/min):" << xn;
-    qDebug() << "Eccentricity:" << elements_.e;
     qDebug() << "Mean anomaly (rad):" << xmp;
-    qDebug() << "Arg of perigee (rad):" << omega;
+    qDebug() << "Argument of perigee (rad):" << omega;
     qDebug() << "RAAN (rad):" << xnode;
+    qDebug() << "Eccentricity:" << e;
 
     // Решение уравнения Кеплера
     double xl = xmp + omega;
-    double E = solveKepler(xl - xnode, elements_.e);
+    double E = xl;
+    for(int i = 0; i < 10; i++) {
+        double E_old = E;
+        E = xl + e * sin(E);
+        if(fabs(E - E_old) < 1.0e-12) break;
+    }
 
     // Вычисление позиции в орбитальной плоскости
-    double sinu = sin(E);
-    double cosu = cos(E);
-    double r = elements_.a * (1.0 - elements_.e * cosu);
-    double u = atan2(sqrt(1.0 - elements_.e * elements_.e) * sinu,
-                     cosu - elements_.e) + omega;
+    double sinE = sin(E);
+    double cosE = cos(E);
+    double sinv = (sqrt(1.0 - e * e) * sinE) / (1.0 - e * cosE);
+    double cosv = (cosE - e) / (1.0 - e * cosE);
+    double v = atan2(sinv, cosv);
+    double u = v + omega;
 
-    // Вычисление скоростей
-    double rdot = xke * elements_.e * sinu * sqrt(1.0 / r);
-    double rfdot = xke * sqrt((1.0 - elements_.e * elements_.e) / r);
+    double r = elements_.a * (1.0 - e * cosE);
+    double rdot = ke * sqrt(elements_.a) * e * sinE / r;
+    double rfdot = ke * sqrt(elements_.a * (1.0 - e * e)) / r;
 
     qDebug() << "Orbital plane values:";
     qDebug() << "r (ER):" << r;
@@ -152,7 +136,7 @@ void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
     qDebug() << "Velocity (km/s):" << vel;
 }
 
-SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) {
+SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
     OrbitalState state;
     state.epoch = time;
     double tsince = epoch_.msecsTo(time) / (1000.0 * 60.0);

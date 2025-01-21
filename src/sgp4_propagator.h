@@ -27,10 +27,8 @@ private:
     static constexpr double AE = 1.0;
     static constexpr double DE2RA = M_PI / 180.0;
     static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double OMEGA_E = 7.29211514670698e-5;  // Скорость вращения Земли (рад/с)
     static constexpr double QOMS2T = 1.880279e-09;
     static constexpr double S = 1.01222928;
-    static constexpr double TOTHRD = 2.0/3.0;
 
     struct Elements {
         // Основные элементы орбиты
@@ -44,7 +42,7 @@ private:
         QDateTime epoch;       // Эпоха
 
         // Производные параметры
-        double a;              // Большая полуось (в земных радиусах)
+        double a;              // Большая полуось (в радиусах Земли)
         double n0;             // Исходное среднее движение
         double cosio;          // cos(i)
         double sinio;          // sin(i)
@@ -56,21 +54,11 @@ private:
         double x3thm1;        // 3*cos²(i) - 1
         double x1mth2;        // 1 - cos²(i)
         double x7thm1;        // 7*cos²(i) - 1
-        double xlcof;         // Коэффициент для долгопериодических возмущений
-        double aycof;         // Коэффициент для годичных возмущений
-        double delmo;         // Коэффициент для средней аномалии
-        double sinmo;         // sin(M)
-        double x2o3;          // 2/3
-        double aodp;          // Параметр орбиты
-        double xmdot;         // Скорость изменения средней аномалии
-        double omgdot;        // Скорость изменения аргумента перигея
-        double xnodot;        // Скорость изменения долготы восходящего узла
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    void calculatePerturbations(double tsince, double& ep, double& xincp,
-                                double& omgadf, double& xnode, double& xmp) const;
-    void solveKeplerEquation(double xme, double xec, double& eps, double& epw) const;
+    void solveKeplerEquation(double& meanAnomaly, double& eccentricAnomaly) const;
+    QVector3D calculatePosVel(double tsince) const;
 
     Elements elements_;
 };

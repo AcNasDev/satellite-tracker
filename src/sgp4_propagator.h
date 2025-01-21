@@ -31,31 +31,22 @@ public:
 
 private:
     // WGS-72 constants
-    static constexpr double XKE = 7.43669161e-2;        // sqrt(GM) ER^3/min
-    static constexpr double CK2 = 5.413080e-4;          // (1/2)J2AE^2
-    static constexpr double CK4 = 0.62098875e-6;        // -(3/8)J4AE^4
-    static constexpr double QOMS2T = 1.880279e-09;
-    static constexpr double AE = 1.0;                   // Distance units/earth radii
-    static constexpr double XKMPER = 6378.135;          // Earth radius km
-    static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double OMEGA_E = 7.29211514670698e-5; // Earth rotation rad/s
-    static constexpr double XJ3 = -2.53881e-6;         // J3 harmonic
-    static constexpr double EARTH_MU = 398600.4418;     // Earth gravitational constant
+    // Обновленные константы
+    static constexpr double XKE = 7.43669161e-2;
+    static constexpr double CK2 = 5.413080e-4;
+    static constexpr double CK4 = 0.62098875e-6;
+    static constexpr double XKMPER = 6378.135;
+    static constexpr double AE = 1.0;
+    static constexpr double XMNPDA = 1440.0;
+    static constexpr double OMEGA_E = 7.29211514670698e-5; // рад/с
 
-    static constexpr double AE_TO_KM = XKMPER;
-    static constexpr double TIME_TO_SEC = 60.0;         // Convert minutes to seconds
-    static constexpr double J2 = 1.082616e-3;
-    static constexpr double J3 = -2.53881e-6;
-    static constexpr double J4 = -1.65597e-6;
-
-    struct ElementsDeep {
-        double eosq, sinio, cosio, betao, aodp, theta2;
-        double sing, cosg, betao2;
-        double xmdot, omgdot, xnodot;
-        double xnodp;
+    struct DeepSpaceElements {
+        double aodp, cosio, sinio, omgdot, xnodot, xmdot;
+        double xnodp, z1, z7, d1, d2, d3, d4, d5;
+        double del1, del2, del3;
     };
 
-    ElementsDeep deep_;
+    DeepSpaceElements deep_;
 
     struct OrbitalElements {
         double inclination;     // радианы

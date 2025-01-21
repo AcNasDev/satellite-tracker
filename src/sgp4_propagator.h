@@ -18,40 +18,45 @@ public:
     OrbitalState calculateState(const QDateTime& time);
 
 private:
-    // Константы SGP4
-    static constexpr double xke = 0.0743669161331734049;  // sqrt(398600.8) / 6378.137^(3/2)
-    static constexpr double xj2 = 1.082616e-3;           // J2 гармоника
-    static constexpr double xj3 = -2.53881e-6;           // J3 гармоника
-    static constexpr double xj4 = -1.65597e-6;           // J4 гармоника
-    static constexpr double xkmper = 6378.137;           // Радиус Земли (км)
-    static constexpr double ae = 1.0;                    // Радиус Земли (единицы Земли)
-    static constexpr double de2ra = M_PI/180.0;          // Градусы в радианы
-    static constexpr double min_per_day = 1440.0;        // Минут в сутках
+    static constexpr double xke = 0.0743669161331734049;
+    static constexpr double xj2 = 1.082616e-3;
+    static constexpr double xj3 = -2.53881e-6;
+    static constexpr double xj4 = -1.65597e-6;
+    static constexpr double xkmper = 6378.137;
+    static constexpr double ae = 1.0;
+    static constexpr double de2ra = M_PI/180.0;
+    static constexpr double min_per_day = 1440.0;
     static constexpr double ck2 = xj2/2.0;
     static constexpr double ck4 = -3.0*xj4/8.0;
+    static constexpr double q0 = 120.0/xkmper;
+    static constexpr double s0 = 78.0/xkmper;
 
     struct Elements {
-        // Начальные элементы орбиты
-        double no;           // Среднее движение [рад/мин]
-        double ecco;        // Эксцентриситет
-        double inclo;       // Наклонение [рад]
-        double nodeo;       // Долгота восходящего узла [рад]
-        double argpo;       // Аргумент перигея [рад]
-        double mo;          // Средняя аномалия [рад]
-        double bstar;       // Баллистический коэффициент [1/радиус_земли]
+        double no;         // Среднее движение [рад/мин]
+        double ecco;       // Эксцентриситет
+        double inclo;      // Наклонение [рад]
+        double nodeo;      // Долгота восходящего узла [рад]
+        double argpo;      // Аргумент перигея [рад]
+        double mo;         // Средняя аномалия [рад]
+        double bstar;      // Баллистический коэффициент [1/ER]
 
-        // Вычисленные параметры
-        double a;           // Большая полуось [радиусы_земли]
-        double ndot;        // Первая производная среднего движения [рад/мин^2]
-        double nddot;       // Вторая производная среднего движения [рад/мин^3]
-        double alta;        // Апогей [радиусы_земли]
-        double altp;        // Перигей [радиусы_земли]
-        double no_kozai;    // Среднее движение по Козаи [рад/мин]
+        // Производные элементы
+        double a;          // Большая полуось [ER]
+        double ndot;       // Первая производная среднего движения [рад/мин^2]
+        double nddot;      // Вторая производная среднего движения [рад/мин^3]
+        double alta;       // Апогей [ER]
+        double altp;       // Перигей [ER]
+        double no_kozai;   // Среднее движение Козаи [рад/мин]
+
+        // Дополнительные параметры
+        double aodp;       // Первоначальная большая полуось [ER]
+        double aycof;      // Коэффициент для y
+        double xlcof;      // Коэффициент для l
     };
 
     void initParameters(const TLEParser::TLEData& tle);
-    void propagate(double tsince, QVector3D& pos, QVector3D& vel);
-    double solveKepler(double M, double e);
+    void propagate(double tsince, QVector3D& pos, QVector3D& vel) ;
+    double solveKepler(double M, double e) ;
 
     Elements elements_;
     QDateTime epoch_;

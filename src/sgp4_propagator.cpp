@@ -52,8 +52,11 @@ SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& tim
     OrbitalState state;
     state.epoch = time;
 
-    // Время с эпохи в минутах
-    const double tsince = elements_.epoch.secsTo(time) / 60.0;
+    // Правильный расчет времени с эпохи
+    const double minutes_per_day = 1440.0;
+    const double days_since_epoch = elements_.epoch.daysTo(time) +
+                                    elements_.epoch.secsTo(time) % 86400 / 86400.0;
+    const double tsince = days_since_epoch * minutes_per_day;
 
     // Обновление средних элементов
     const double M = sgp4_.M + sgp4_.n * tsince;

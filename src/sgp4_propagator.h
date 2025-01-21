@@ -20,39 +20,42 @@ public:
 
 private:
     // Константы SGP4
-    static constexpr double XKE = 0.0743669161331734049;
-    static constexpr double CK2 = 5.413080e-4;
-    static constexpr double CK4 = 0.62098875e-6;
-    static constexpr double XKMPER = 6378.137;
-    static constexpr double AE = 1.0;
-    static constexpr double DE2RA = M_PI / 180.0;
-    static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double SQRT_GM = 0.0743669161331734049; // sqrt(GM) in ER^(3/2)/min
+    static constexpr double xke = 0.0743669161331734049;
+    static constexpr double ck2 = 5.413080e-4;
+    static constexpr double ck4 = 0.62098875e-6;
+    static constexpr double e6a = 1.0e-6;
+    static constexpr double qoms2t = 1.880279e-09;
+    static constexpr double xkmper = 6378.137;
+    static constexpr double ae = 1.0;
+    static constexpr double s = 1.012229;
+    static constexpr double tothrd = 2.0 / 3.0;
+    static constexpr double pi = M_PI;
+    static constexpr double xj3 = -0.253881e-5;
+    static constexpr double xke2 = 7.436685e-2;
+    static constexpr double minutes_per_day = 1440.0;
+    static constexpr double a3ovk2 = -xj3 / ck2;
 
-    struct OrbitalElements {
-        // Основные элементы
-        double inclo;    // Наклонение (рад)
-        double nodeo;    // RA восходящего узла (рад)
-        double ecco;     // Эксцентриситет
-        double argpo;    // Аргумент перигея (рад)
-        double mo;       // Средняя аномалия (рад)
-        double no;       // Среднее движение (рад/мин)
-        double bstar;    // Баллистический коэффициент
-
-        // Вспомогательные элементы
-        double a;        // Большая полуось (земные радиусы)
-        double alta;     // Апогей (км)
-        double altp;     // Перигей (км)
-        double jdsatepoch; // Юлианская дата эпохи
+    struct SGP4Data {
+        double a, altp, alta;
+        double epochdays, jdsatepoch;
+        double ndot, nddot;
+        double bstar, rcse;
+        double inclo, nodeo, ecco, argpo, mo, no_kozai;
+        double method;
+        double aycof, con41, cc1, cc4, cc5;
+        double d2, d3, d4;
+        double delmo, eta;
+        double argpdot, omgcof, sinmao, t2cof, t3cof, t4cof, t5cof;
+        double x1mth2, x3thm1, x7thm1, mdot, nodedot, xlcof, xmcof; // Добавлен x3thm1
+        double nodecf;
+        int isimp;
     };
 
-    void initializeParameters(const TLEParser::TLEData& tle);
-    void sgp4init();
-    void sgp4(double tsince, QVector3D& pos, QVector3D& vel) const;
-    void rv2coe(const QVector3D& pos, const QVector3D& vel, double& a, double& e,
-                double& i, double& omega, double& argp, double& nu) const;
+    void sgp4init(const TLEParser::TLEData& tle);
+    QVector3D getPosition(double tsince) const;
+    QVector3D getVelocity(double tsince) const;
 
-    OrbitalElements elements_;
+    SGP4Data satrec_;
     QDateTime epoch_;
 };
 

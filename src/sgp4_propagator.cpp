@@ -2,159 +2,119 @@
 #include <QtMath>
 
 SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
-    initializeParameters(tle);
-    sgp4init();
+    sgp4init(tle);
 }
 
-void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
+void SGP4Propagator::sgp4init(const TLEParser::TLEData& tle) {
     epoch_ = tle.epoch;
 
-    // Преобразование базовых элементов из TLE
-    elements_.inclo = tle.inclination * DE2RA;
-    elements_.nodeo = tle.right_ascension * DE2RA;
-    elements_.ecco = tle.eccentricity;
-    elements_.argpo = tle.argument_perigee * DE2RA;
-    elements_.mo = tle.mean_anomaly * DE2RA;
-    elements_.no = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
-    elements_.bstar = tle.bstar;
+    // Инициализация параметров из TLE
+    satrec_.inclo = tle.inclination * pi / 180.0;
+    satrec_.nodeo = tle.right_ascension * pi / 180.0;
+    satrec_.ecco = tle.eccentricity;
+    satrec_.argpo = tle.argument_perigee * pi / 180.0;
+    satrec_.mo = tle.mean_anomaly * pi / 180.0;
+    satrec_.no_kozai = tle.mean_motion * 2.0 * pi / minutes_per_day;
+    satrec_.bstar = tle.bstar;
 
-    // Расчет юлианской даты эпохи
-    QDate baseDate(1949, 12, 31);
-    double days = baseDate.daysTo(tle.epoch.date());
-    double fractionalDay = (tle.epoch.time().msecsSinceStartOfDay() / 1000.0) / 86400.0;
-    elements_.jdsatepoch = 2433281.5 + days + fractionalDay;
-}
+    // Инициализация переменных
+    satrec_.isimp = 0;
+    satrec_.method = 'n';
+    satrec_.aycof = 0.0;
+    satrec_.con41 = 0.0;
+    satrec_.cc1 = 0.0;
+    satrec_.cc4 = 0.0;
+    satrec_.cc5 = 0.0;
+    satrec_.d2 = 0.0;
+    satrec_.d3 = 0.0;
+    satrec_.d4 = 0.0;
+    satrec_.delmo = 0.0;
+    satrec_.eta = 0.0;
+    satrec_.argpdot = 0.0;
+    satrec_.omgcof = 0.0;
+    satrec_.sinmao = 0.0;
+    satrec_.t2cof = 0.0;
+    satrec_.t3cof = 0.0;
+    satrec_.t4cof = 0.0;
+    satrec_.t5cof = 0.0;
 
-void SGP4Propagator::sgp4init() {
-    // Вычисление вспомогательных параметров
-    const double cosio = cos(elements_.inclo);
-    const double theta2 = cosio * cosio;
-    const double x3thm1 = 3.0 * theta2 - 1.0;
-    const double eosq = elements_.ecco * elements_.ecco;
-    const double betao2 = 1.0 - eosq;
-    const double betao = sqrt(betao2);
+    // Вычисление вспомогательных величин
+    double cosio = cos(satrec_.inclo);
+    double sinio = sin(satrec_.inclo);
+    double cosio2 = cosio * cosio;
+
+    satrec_.x3thm1 = 3.0 * cosio2 - 1.0;
+    satrec_.x1mth2 = 1.0 - cosio2;
+    satrec_.x7thm1 = 7.0 * cosio2 - 1.0;
 
     // Вычисление большой полуоси
-    double ao, sinio, po, con42, con41, ainv, einv, posq;
+    double a1 = pow(xke / satrec_.no_kozai, tothrd);
+    satrec_.rcse = 1.0 / (1.0 - satrec_.ecco);
 
-    // Восстановление исходной средней движения
-    double temp = elements_.no / XKE;
-    ao = pow(temp * temp, -1.0 / 3.0);
-    sinio = sin(elements_.inclo);
-    po = ao * betao2;
-    con42 = 1.0 - 5.0 * theta2;
-    con41 = -con42 - theta2 - theta2;
-    ainv = 1.0 / ao;
-    einv = 1.0 / (elements_.ecco - 1.0);
-    posq = po * po;
+    // Коррекция для SGP4
+    double delta1 = 1.5 * ck2 * satrec_.x3thm1 / (a1 * a1);
+    double a0 = a1 * (1.0 - delta1 * (0.5 * tothrd + delta1 * (1.0 + 134.0/81.0 * delta1)));
+    double delta0 = 1.5 * ck2 * satrec_.x3thm1 / (a0 * a0);
 
-    // Для J2 возмущений
-    double temp1 = 3.0 * CK2 * ainv * ainv;
-    double temp2 = temp1 * CK2 * ainv;
-    double temp3 = 1.25 * CK4 * ainv * ainv * ainv * ainv;
+    satrec_.a = a0 / (1.0 - delta0);
+    satrec_.alta = satrec_.a * (1.0 + satrec_.ecco) - 1.0;
+    satrec_.altp = satrec_.a * (1.0 - satrec_.ecco) - 1.0;
 
-    elements_.a = ao / (1.0 - temp1 * betao * x3thm1 / 2.0 -
-                        temp2 * betao * (13.0 - 78.0 * theta2 + 137.0 * theta2 * theta2) / 16.0);
+    // Вычисление производных величин
+    double temp1 = 1.5 * ck2 * satrec_.x3thm1;
+    double temp2 = 0.5 * temp1;
 
-    double delta1 = temp1 * x3thm1 / 2.0 +
-                    temp2 * (13.0 - 78.0 * theta2 + 137.0 * theta2 * theta2) / 16.0;
+    satrec_.mdot = satrec_.no_kozai + 0.5 * temp1 * satrec_.rcse / sqrt(satrec_.a);
+    satrec_.argpdot = -temp2 * cosio / satrec_.a;
+    satrec_.nodedot = -temp2 * cosio / satrec_.a;
 
-    elements_.no = elements_.no / (1.0 + delta1);
-
-    // Рассчитываем апогей и перигей
-    elements_.alta = elements_.a * (1.0 + elements_.ecco) - 1.0;
-    elements_.altp = elements_.a * (1.0 - elements_.ecco) - 1.0;
-
-    // Преобразуем в километры
-    elements_.alta *= XKMPER;
-    elements_.altp *= XKMPER;
+    // Дополнительные коэффициенты
+    satrec_.xlcof = 0.125 * a3ovk2 * sinio * (3.0 + 5.0 * cosio) / (1.0 + cosio);
+    satrec_.aycof = 0.25 * a3ovk2 * sinio;
 }
 
-void SGP4Propagator::sgp4(double tsince, QVector3D& pos, QVector3D& vel) const {
-    // Вычисляем возмущенные элементы орбиты
-    double xmdf = elements_.mo + elements_.no * tsince;
-    double omega = elements_.argpo;
-    double xnode = elements_.nodeo;
-    double bstar = elements_.bstar;
-
-    // Учет J2 возмущений
-    const double cosio = cos(elements_.inclo);
-    const double theta2 = cosio * cosio;
-    const double x3thm1 = 3.0 * theta2 - 1.0;
-
-    double omgdot = -1.5 * CK2 * elements_.no * x3thm1 / (elements_.a * elements_.a);
-    double xnodot = -1.5 * CK2 * elements_.no * cosio / (elements_.a * elements_.a);
-
-    omega += omgdot * tsince;
-    xnode += xnodot * tsince;
+QVector3D SGP4Propagator::getPosition(double tsince) const {
+    // Вычисление средней аномалии
+    double xmdf = satrec_.mo + satrec_.mdot * tsince;
+    double omgadf = satrec_.argpo + satrec_.argpdot * tsince;
+    double xnode = satrec_.nodeo + satrec_.nodedot * tsince;
 
     // Решение уравнения Кеплера
+    double e = satrec_.ecco;
     double xl = xmdf;
+    for(int i = 0; i < 10; i++) {
+        double xll = xl;
+        xl = xmdf + e * sin(xl);
+        if(fabs(xl - xll) < 1.0e-12) break;
+    }
+
+    // Вычисление позиции в орбитальной плоскости
     double u = xl - xnode;
-    double e = elements_.ecco;
+    double sin_u = sin(u);
+    double cos_u = cos(u);
 
-    double iter = 0;
-    double sineo, coseo;
-    double eo;
-    do {
-        eo = xl;
-        sineo = sin(xl);
-        coseo = cos(xl);
-        xl = u + e * sineo;
-        iter++;
-    } while (fabs(xl - eo) >= 1.0e-12 && iter < 10);
+    double r = satrec_.a * (1.0 - e * cos(xl));
+    double xmx = r * (cos_u * cos(xnode) - sin_u * sin(xnode) * cos(satrec_.inclo));
+    double xmy = r * (cos_u * sin(xnode) + sin_u * cos(xnode) * cos(satrec_.inclo));
+    double xmz = r * sin_u * sin(satrec_.inclo);
 
-    // Вычисление позиции и скорости в орбитальной плоскости
-    double sinuk = sin(u);
-    double cosuk = cos(u);
+    return QVector3D(xmx, xmy, xmz) * xkmper;
+}
 
-    double r = elements_.a * (1.0 - e * coseo);
-    double rdot = sqrt(elements_.a) * e * sineo / r;
-    double rfdot = sqrt(elements_.a * (1.0 - e * e)) * coseo / r;
-
-    // Преобразование в ECI координаты
-    double sini = sin(elements_.inclo);
-    double cosi = cos(elements_.inclo);
-    double sinnok = sin(xnode);
-    double cosnok = cos(xnode);
-    double sinomega = sin(omega);
-    double cosomega = cos(omega);
-
-    // Позиция (в км)
-    double xmx = r * ((cosuk * cosnok - sinuk * sinnok * cosi) * cosomega -
-                      (sinuk * cosnok + cosuk * sinnok * cosi) * sinomega);
-    double xmy = r * ((cosuk * sinnok + sinuk * cosnok * cosi) * cosomega -
-                      (sinuk * sinnok - cosuk * cosnok * cosi) * sinomega);
-    double xmz = r * (sinuk * sini + cosuk * cosi * sinomega);
-
-    pos = QVector3D(xmx, xmy, xmz) * XKMPER;
-
-    // Скорость (в км/с)
-    double vx = XKMPER * ((rdot * (cosuk * cosnok - sinuk * sinnok * cosi) -
-                           rfdot * (sinuk * cosnok + cosuk * sinnok * cosi)) * cosomega -
-                          (rdot * (sinuk * cosnok + cosuk * sinnok * cosi) +
-                           rfdot * (cosuk * cosnok - sinuk * sinnok * cosi)) * sinomega) / 60.0;
-
-    double vy = XKMPER * ((rdot * (cosuk * sinnok + sinuk * cosnok * cosi) -
-                           rfdot * (sinuk * sinnok - cosuk * cosnok * cosi)) * cosomega -
-                          (rdot * (sinuk * sinnok - cosuk * cosnok * cosi) +
-                           rfdot * (cosuk * sinnok + sinuk * cosnok * cosi)) * sinomega) / 60.0;
-
-    double vz = XKMPER * (rdot * sinuk * sini + rfdot * cosuk * sini +
-                          (rdot * cosuk * cosi - rfdot * sinuk * cosi) * sinomega) / 60.0;
-
-    vel = QVector3D(vx, vy, vz);
+QVector3D SGP4Propagator::getVelocity(double tsince) const {
+    const double dt = 0.0001;
+    QVector3D r1 = getPosition(tsince - dt);
+    QVector3D r2 = getPosition(tsince + dt);
+    return (r2 - r1) / (2.0 * dt * 60.0); // переводим в км/с
 }
 
 SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
     OrbitalState state;
     state.epoch = time;
 
-    // Расчет времени с эпохи в минутах
     double tsince = epoch_.msecsTo(time) / (1000.0 * 60.0);
-
-    // Вычисление позиции и скорости
-    sgp4(tsince, state.position, state.velocity);
+    state.position = getPosition(tsince);
+    state.velocity = getVelocity(tsince);
 
     return state;
 }

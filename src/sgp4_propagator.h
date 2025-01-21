@@ -19,7 +19,7 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // Фундаментальные константы
+    // Физические константы
     static constexpr double XKE = 7.43669161e-2;
     static constexpr double CK2 = 5.413080e-4;
     static constexpr double CK4 = 0.62098875e-6;
@@ -31,34 +31,45 @@ private:
     static constexpr double J2 = 1.082616e-3;           // J2 гармоника
     static constexpr double J3 = -2.53881e-6;           // J3 гармоника
     static constexpr double J4 = -1.65597e-6;           // J4 гармоника
+    static constexpr double A3OVK2 = -J3/CK2;           // Отношение J3/J2
+    static constexpr double MU = 398600.4418;           // Гравитационный параметр Земли (км³/с²)
 
-    struct SGP4Elements {
-        double a;          // Большая полуось (радиусы Земли)
-        double e;          // Эксцентриситет
-        double i;          // Наклонение (радианы)
-        double omega;      // Аргумент перигея (радианы)
-        double Omega;      // Прямое восхождение (радианы)
-        double M;          // Средняя аномалия (радианы)
-        double n;          // Среднее движение (рад/мин)
-        double bstar;      // Баллистический коэффициент
-        QDateTime epoch;   // Эпоха
+    struct OrbitalElements {
+        double a;              // Большая полуось (км)
+        double e;              // Эксцентриситет
+        double i;              // Наклонение (рад)
+        double omega;          // Аргумент перигея (рад)
+        double Omega;          // Долгота восходящего узла (рад)
+        double M;              // Средняя аномалия (рад)
+        double n;              // Среднее движение (рад/мин)
+        double bstar;          // Баллистический коэффициент
+        QDateTime epoch;       // Эпоха элементов
 
         // Вспомогательные элементы
-        double cosio;      // cos(i)
-        double sinio;      // sin(i)
-        double eta;        // sqrt(1 - e^2)
-        double coef;       // Коэффициент для вековых возмущений
-        double c1;         // Коэффициент J2
-        double a0;         // Начальная большая полуось
-        double n0;         // Начальное среднее движение
-        double beta0;      // sqrt(1 - e^2)
+        double cosio;          // cos(i)
+        double sinio;          // sin(i)
+        double eta;            // sqrt(1 - e^2)
+        double coef;          // Коэффициент для драг-эффекта
+        double c1;            // Коэффициент J2
+        double c4;            // Коэффициент для периодических возмущений
+        double a0;            // Начальная большая полуось
+        double n0;            // Начальное среднее движение
+        double beta0;         // sqrt(1 - e^2)
+        double theta2;        // cos²(i)
+        double x3thm1;        // 3cos²(i) - 1
+        double x7thm1;        // 7cos²(i) - 1
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    QVector3D calculatePosVel(const double tsince) const;
-    double solveKeplerEquation(double M, double e) const;
+    void calculateSecularEffects(double tsince, double& xmdf, double& omgadf,
+                                 double& xnode, double& eps1) const;
+    void calculatePeriodicEffects(double tsince, double& em, double& xinc,
+                                  double& omgda, double& xnode, double& xll) const;
+    QVector3D calculatePosVel(double r, double rdot, double rfdot,
+                              double cosuk, double sinuk, double rk,
+                              double uk, double xnodek, double xinck) const;
 
-    SGP4Elements elements_;
+    OrbitalElements elements_;
 };
 
 #endif // SGP4_PROPAGATOR_H

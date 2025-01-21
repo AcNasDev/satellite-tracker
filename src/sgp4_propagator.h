@@ -44,6 +44,18 @@ private:
 
     static constexpr double AE_TO_KM = XKMPER;
     static constexpr double TIME_TO_SEC = 60.0;         // Convert minutes to seconds
+    static constexpr double J2 = 1.082616e-3;
+    static constexpr double J3 = -2.53881e-6;
+    static constexpr double J4 = -1.65597e-6;
+
+    struct ElementsDeep {
+        double eosq, sinio, cosio, betao, aodp, theta2;
+        double sing, cosg, betao2;
+        double xmdot, omgdot, xnodot;
+        double xnodp;
+    };
+
+    ElementsDeep deep_;
 
     struct OrbitalElements {
         double inclination;     // радианы

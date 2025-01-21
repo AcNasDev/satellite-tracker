@@ -5,98 +5,107 @@ SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
     initializeParameters(tle);
 }
 
-// sgp4_propagator.cpp
 void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
+    // Базовые элементы
     elements_.inclination = tle.inclination * M_PI / 180.0;
     elements_.right_ascension = tle.right_ascension * M_PI / 180.0;
     elements_.eccentricity = tle.eccentricity;
     elements_.arg_perigee = tle.argument_perigee * M_PI / 180.0;
     elements_.mean_anomaly = tle.mean_anomaly * M_PI / 180.0;
-
-    // Convert mean motion to radians per minute
-    const double xno = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
-    elements_.mean_motion = xno;
+    elements_.mean_motion = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
     elements_.bstar = tle.bstar;
     elements_.epoch = tle.epoch;
 
-    // Calculate semi-major axis (in Earth radii)
-    const double a1 = pow(XKE / xno, 2.0/3.0);
-    const double cosio = cos(elements_.inclination);
-    const double theta2 = cosio * cosio;
-    const double x3thm1 = 3.0 * theta2 - 1.0;
-    const double eosq = elements_.eccentricity * elements_.eccentricity;
-    const double betao2 = 1.0 - eosq;
-    const double betao = sqrt(betao2);
+    // Вычисление глубоких элементов
+    deep_.cosio = cos(elements_.inclination);
+    deep_.sinio = sin(elements_.inclination);
+    deep_.theta2 = deep_.cosio * deep_.cosio;
 
-    // SGP4 initialization
-    const double del1 = 1.5 * CK2 * x3thm1 / (a1 * a1 * betao * betao2);
+    // Коррекция для эксцентриситета и движения перигея
+    deep_.eosq = elements_.eccentricity * elements_.eccentricity;
+    deep_.betao2 = 1.0 - deep_.eosq;
+    deep_.betao = sqrt(deep_.betao2);
+
+    // Вычисление среднего движения
+    const double a1 = pow(XKE / elements_.mean_motion, 2.0/3.0);
+    const double del1 = 1.5 * CK2 * (3.0 * deep_.theta2 - 1.0) /
+                        (a1 * a1 * deep_.betao * deep_.betao2);
+
     const double ao = a1 * (1.0 - del1 * (0.5 + del1 * (1.0 + 134.0/81.0 * del1)));
-    const double delo = 1.5 * CK2 * x3thm1 / (ao * ao * betao * betao2);
+    const double delo = 1.5 * CK2 * (3.0 * deep_.theta2 - 1.0) /
+                        (ao * ao * deep_.betao * deep_.betao2);
 
-    elements_.a = ao * (1.0 - delo);  // in Earth radii
-    elements_.n0 = xno / (1.0 + delo);
-    elements_.n = elements_.n0;
+    // Окончательные значения
+    deep_.xnodp = elements_.mean_motion / (1.0 + delo);
+    deep_.aodp = ao / (1.0 - delo);
+
+    // Вычисление вековых возмущений
+    const double xhdot1 = -1.5 * CK2 * deep_.xnodp * deep_.sinio * deep_.cosio /
+                          (deep_.betao * deep_.betao2);
+
+    deep_.xmdot = deep_.xnodp + 0.5 * xhdot1 * elements_.eccentricity *
+                                    (13.0 - 78.0 * deep_.theta2 + 137.0 * deep_.theta2 * deep_.theta2);
+
+    const double x1m5th = 1.0 - 5.0 * deep_.theta2;
+    const double omgdt = -0.5 * xhdot1 * x1m5th;
+    deep_.xnodot = omgdt;
 }
 
 SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
     OrbitalState state;
     state.epoch = time;
 
-    // Time since epoch in minutes
+    // Время с эпохи в минутах
     const double tsince = elements_.epoch.secsTo(time) / 60.0;
 
-    // Update for secular gravity and atmospheric drag
-    const double xmp = elements_.mean_anomaly + elements_.n * tsince;
-    const double omega = elements_.arg_perigee;
-    const double xnode = elements_.right_ascension;
+    // Обновление средних элементов
+    const double xmp = elements_.mean_anomaly + deep_.xmdot * tsince;
+    const double omgasm = elements_.arg_perigee + deep_.omgdot * tsince;
+    const double xnodes = elements_.right_ascension + deep_.xnodot * tsince;
 
-    // Solve Kepler's equation
+    // Решение уравнения Кеплера
     double E = xmp;
-    double delta;
+    double delE;
     for(int i = 0; i < 10; i++) {
-        delta = E - elements_.eccentricity * sin(E) - xmp;
-        E = E - delta / (1.0 - elements_.eccentricity * cos(E));
-        if(fabs(delta) < 1e-12) break;
+        delE = (E - elements_.eccentricity * sin(E) - xmp) /
+               (1.0 - elements_.eccentricity * cos(E));
+        E -= delE;
+        if(fabs(delE) < 1e-12) break;
     }
 
-    // Short-period periodic elements
-    const double sin_E = sin(E);
-    const double cos_E = cos(E);
+    // Позиция в орбитальной плоскости
+    const double cosE = cos(E);
+    const double sinE = sin(E);
 
-    // Position and velocity in orbital plane
-    const double r = elements_.a * (1.0 - elements_.eccentricity * cos_E);
-    const double v = sqrt(EARTH_MU / (elements_.a * AE_TO_KM));
+    const double r = deep_.aodp * XKMPER * (1.0 - elements_.eccentricity * cosE);
+    double rdot = XKE * deep_.aodp * elements_.eccentricity * sinE / r;
+    const double rfdot = XKE * sqrt(deep_.aodp) * sqrt(1.0 - elements_.eccentricity * elements_.eccentricity) / r;
 
-    const double sinv = (sqrt(1.0 - elements_.eccentricity * elements_.eccentricity) * sin_E) / (1.0 - elements_.eccentricity * cos_E);
-    const double cosv = (cos_E - elements_.eccentricity) / (1.0 - elements_.eccentricity * cos_E);
+    // Ориентация
+    const double cosomg = cos(omgasm);
+    const double sinomg = sin(omgasm);
+    const double cosnod = cos(xnodes);
+    const double sinnod = sin(xnodes);
 
-    // Orientation vectors
-    const double sin_i = sin(elements_.inclination);
-    const double cos_i = cos(elements_.inclination);
-    const double sin_omega = sin(omega);
-    const double cos_omega = cos(omega);
-    const double sin_xnode = sin(xnode);
-    const double cos_xnode = cos(xnode);
+    const double xmx = r * (cosomg * cosnod - sinomg * sinnod * deep_.cosio);
+    const double xmy = r * (cosomg * sinnod + sinomg * cosnod * deep_.cosio);
+    const double xmz = r * sinomg * deep_.sinio;
 
-    // Position in ECI (in km)
-    const double rx = r * (cos_omega * cosv - sin_omega * sinv);
-    const double ry = r * (sin_omega * cosv + cos_omega * sinv);
+    // Позиция в ECI
+    state.position = QVector3D(xmx, xmy, xmz);
 
-    state.position = QVector3D(
-        AE_TO_KM * (rx * cos_xnode - ry * cos_i * sin_xnode),
-        AE_TO_KM * (rx * sin_xnode + ry * cos_i * cos_xnode),
-        AE_TO_KM * (ry * sin_i)
-        );
-
-    // Velocity in ECI (in km/s)
-    const double vfac = sqrt(EARTH_MU / (r * AE_TO_KM));
-    const double vr = vfac * elements_.eccentricity * sin_E;
-    const double vt = vfac * sqrt(1.0 - elements_.eccentricity * elements_.eccentricity);
+    // Скорость в ECI
+    const double rdotk = rdot * XKMPER / 60.0;  // km/s
+    const double rfdotk = rfdot * XKMPER / 60.0; // km/s
 
     state.velocity = QVector3D(
-        (vr * cos_xnode - vt * sin_xnode) / TIME_TO_SEC,
-        (vr * sin_xnode + vt * cos_xnode) / TIME_TO_SEC,
-        0.0
+        rdotk * (cosomg * cosnod - sinomg * sinnod * deep_.cosio) -
+            rfdotk * (sinomg * cosnod + cosomg * sinnod * deep_.cosio),
+
+        rdotk * (cosomg * sinnod + sinomg * cosnod * deep_.cosio) +
+            rfdotk * (cosomg * cosnod - sinomg * sinnod * deep_.cosio),
+
+        rdotk * sinomg * deep_.sinio + rfdotk * cosomg * deep_.sinio
         );
 
     return state;

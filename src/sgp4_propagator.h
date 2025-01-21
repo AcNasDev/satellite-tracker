@@ -1,4 +1,3 @@
-// sgp4_propagator.h
 #ifndef SGP4_PROPAGATOR_H
 #define SGP4_PROPAGATOR_H
 
@@ -19,51 +18,42 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // SGP4 константы
-    static constexpr double ae = 1.0;
-    static constexpr double tothrd = 2.0/3.0;
-    static constexpr double xkmper = 6378.137;
-    static constexpr double f = 1.0/298.257223563;
-    static constexpr double j2 = 1.082616e-3;
-    static constexpr double j3 = -2.53881e-6;
-    static constexpr double j4 = -1.65597e-6;
-    static constexpr double ke = 7.43669161e-2;
-    static constexpr double ck2 = j2/2.0;
-    static constexpr double ck4 = -3.0*j4/8.0;
-    static constexpr double xj3 = j3;
-    static constexpr double qo = ae + 120.0/xkmper;
-    static constexpr double s = ae + 78.0/xkmper;
-    static constexpr double min_per_day = 1440.0;
-    static constexpr double de2ra = M_PI/180.0;
+    // Константы SGP4
+    static constexpr double xke = 0.0743669161331734049;  // sqrt(398600.8) / 6378.137^(3/2)
+    static constexpr double xj2 = 1.082616e-3;           // J2 гармоника
+    static constexpr double xj3 = -2.53881e-6;           // J3 гармоника
+    static constexpr double xj4 = -1.65597e-6;           // J4 гармоника
+    static constexpr double xkmper = 6378.137;           // Радиус Земли (км)
+    static constexpr double ae = 1.0;                    // Радиус Земли (единицы Земли)
+    static constexpr double de2ra = M_PI/180.0;          // Градусы в радианы
+    static constexpr double min_per_day = 1440.0;        // Минут в сутках
+    static constexpr double ck2 = xj2/2.0;
+    static constexpr double ck4 = -3.0*xj4/8.0;
 
     struct Elements {
-        // Исходные элементы
-        double no;     // Начальное среднее движение [rad/min]
-        double eo;     // Начальный эксцентриситет
-        double io;     // Начальное наклонение [rad]
-        double omegao; // Начальный аргумент перигея [rad]
-        double xnodeo; // Начальная долгота восходящего узла [rad]
-        double xmo;    // Начальная средняя аномалия [rad]
-        double bstar;  // Баллистический коэффициент [1/earth radii]
+        // Начальные элементы орбиты
+        double no;           // Среднее движение [рад/мин]
+        double ecco;        // Эксцентриситет
+        double inclo;       // Наклонение [рад]
+        double nodeo;       // Долгота восходящего узла [рад]
+        double argpo;       // Аргумент перигея [рад]
+        double mo;          // Средняя аномалия [рад]
+        double bstar;       // Баллистический коэффициент [1/радиус_земли]
 
-        // Производные элементы
-        double a;      // Большая полуось [earth radii]
-        double ndot;   // Скорость изменения среднего движения [rad/min^2]
-        double nddot;  // Ускорение среднего движения [rad/min^3]
-        double inclo;  // Наклонение [rad]
-        double nodeo;  // Долгота восходящего узла [rad]
-        double argpo;  // Аргумент перигея [rad]
-        double mo;     // Средняя аномалия [rad]
-        double no_kozai; // Среднее движение по Козаи [rad/min]
+        // Вычисленные параметры
+        double a;           // Большая полуось [радиусы_земли]
+        double ndot;        // Первая производная среднего движения [рад/мин^2]
+        double nddot;       // Вторая производная среднего движения [рад/мин^3]
+        double alta;        // Апогей [радиусы_земли]
+        double altp;        // Перигей [радиусы_земли]
+        double no_kozai;    // Среднее движение по Козаи [рад/мин]
     };
 
     void initParameters(const TLEParser::TLEData& tle);
-    void deepSpaceInitialize();
     void propagate(double tsince, QVector3D& pos, QVector3D& vel) const;
+    double solveKepler(double M, double e) const;
 
     Elements elements_;
     QDateTime epoch_;
-    bool is_deep_space_;
 };
-
-#endif // SGP4_PROPAGATOR_H
+#endif

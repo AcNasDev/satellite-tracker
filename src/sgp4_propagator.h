@@ -10,8 +10,8 @@
 class SGP4Propagator {
 public:
     struct OrbitalState {
-        QVector3D position;     // км в системе ECI
-        QVector3D velocity;     // км/с в системе ECI
+        QVector3D position;     // км в ECI
+        QVector3D velocity;     // км/с в ECI
         QDateTime epoch;        // время расчета
     };
 
@@ -19,43 +19,45 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // Константы SGP4
-    static constexpr double xke = 0.0743669161331734049;
-    static constexpr double ck2 = 5.413080e-4;
-    static constexpr double ck4 = 0.62098875e-6;
-    static constexpr double e6a = 1.0e-6;
-    static constexpr double qoms2t = 1.880279e-09;
-    static constexpr double xkmper = 6378.137;
-    static constexpr double ae = 1.0;
-    static constexpr double s = 1.012229;
+    // SGP4 константы
+    static constexpr double ae = 1.0;                    // Earth radius in ER units
     static constexpr double tothrd = 2.0 / 3.0;
-    static constexpr double pi = M_PI;
-    static constexpr double xj3 = -0.253881e-5;
-    static constexpr double xke2 = 7.436685e-2;
-    static constexpr double minutes_per_day = 1440.0;
-    static constexpr double a3ovk2 = -xj3 / ck2;
+    static constexpr double xke = 0.0743669161331734049; // sqrt(GM) in ER^(3/2)/min
+    static constexpr double ck2 = 5.413080e-4;           // J2/2
+    static constexpr double ck4 = 0.62098875e-6;         // -3J4/8
+    static constexpr double j3 = -0.253881e-5;           // J3
+    static constexpr double xkmper = 6378.137;           // Earth radius in km
+    static constexpr double minute_per_day = 1440.0;
+    static constexpr double ae_to_km = 6378.137;
+    static constexpr double s = 1.012229;                // AE/RE ratio
 
-    struct SGP4Data {
-        double a, altp, alta;
-        double epochdays, jdsatepoch;
-        double ndot, nddot;
-        double bstar, rcse;
-        double inclo, nodeo, ecco, argpo, mo, no_kozai;
-        double method;
-        double aycof, con41, cc1, cc4, cc5;
-        double d2, d3, d4;
-        double delmo, eta;
-        double argpdot, omgcof, sinmao, t2cof, t3cof, t4cof, t5cof;
-        double x1mth2, x3thm1, x7thm1, mdot, nodedot, xlcof, xmcof; // Добавлен x3thm1
-        double nodecf;
-        int isimp;
+    struct SGP4Elements {
+        double a;          // Semi-major axis (Earth radii)
+        double ecco;      // Eccentricity
+        double inclo;     // Inclination (radians)
+        double nodeo;     // RAAN (radians)
+        double argpo;     // Argument of perigee (radians)
+        double mo;        // Mean anomaly (radians)
+        double no;        // Mean motion (radians/minute)
+        double bstar;     // Drag term
+        double aycof;
+
+        // Вычисляемые параметры
+        double alta, altp, a0, d2, d3, d4, del1, del2, del3;
+        double eta, argpdot, omgcof, sinmao, t2cof, t3cof, t4cof, t5cof;
+        double x1mth2, x7thm1, xlcof, xmcof, nodecf, nodedot, xnodot;
+        double e0, mdot;
     };
 
-    void sgp4init(const TLEParser::TLEData& tle);
-    QVector3D getPosition(double tsince) const;
-    QVector3D getVelocity(double tsince) const;
+    void initParameters(const TLEParser::TLEData& tle);
+    void calculateSecularEffects(double tsince, double& xll, double& omgasm,
+                                 double& xnodes, double& em, double& xinc,
+                                 double& xn) const;
+    void calculatePeriodicEffects(double tsince, double& em, double& xinc,
+                                  double& omgasm, double& xnodes, double& xll) const;
+    void solveKepler(double& xll, double e) const;
 
-    SGP4Data satrec_;
+    SGP4Elements elements_;
     QDateTime epoch_;
 };
 

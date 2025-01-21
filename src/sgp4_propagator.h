@@ -37,11 +37,13 @@ private:
     static constexpr double QOMS2T = 1.880279E-09;
     static constexpr double S = 1.01222928;
     static constexpr double XKMPER = 6378.135;    // радиус Земли в км
-    static constexpr double AE = 1.0;
+    static constexpr double AE = 6378.135;              // км (экваториальный радиус)
+    static constexpr double KE = 7.43669161E-2;         // корень из GM
     static constexpr double DE2RA = 0.174532925E-1;
     static constexpr double MINUTES_PER_DAY = 1440.0;
     static constexpr double MU = 398600.8;        // гравитационный параметр Земли
-    static constexpr double EARTH_RADIUS = 6378.137;    // км (WGS-84)
+    static constexpr double XPDOTP = 1440.0 / (2.0 * M_PI); // минут на оборот
+    static constexpr double EARTH_RADIUS = 6378.135;    // км
     static constexpr double EARTH_FLATTENING = 1.0/298.257223563;
     static constexpr double EARTH_ROTATION_RATE = 7.2921150e-5; // рад/с
 

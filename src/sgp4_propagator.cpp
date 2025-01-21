@@ -11,25 +11,25 @@ void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
     elements_.eccentricity = tle.eccentricity;
     elements_.arg_perigee = tle.argument_perigee * DE2RA;
     elements_.mean_anomaly = tle.mean_anomaly * DE2RA;
-    elements_.mean_motion = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
+    elements_.mean_motion = tle.mean_motion;
     elements_.bstar = tle.bstar;
     elements_.epoch = tle.epoch;
 
-    // Вычисление производных параметров
-    double a1 = std::pow(XKE / elements_.mean_motion, 2.0/3.0);
-    double cosio = qCos(elements_.inclination);
-    double theta2 = cosio * cosio;
-    double x3thm1 = 3.0 * theta2 - 1.0;
-    double eosq = elements_.eccentricity * elements_.eccentricity;
-    double betao2 = 1.0 - eosq;
-    double betao = qSqrt(betao2);
+    // Преобразование среднего движения
+    elements_.n0 = elements_.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
+
+    // Вычисление большой полуоси
+    double a1 = std::pow(KE / elements_.n0, 2.0/3.0);
+    elements_.a = a1 * AE; // Масштабирование к километрам
+
+    // Коррекция для J2
+    double delta1 = 1.5 * CK2 * (3.0 * std::pow(std::cos(elements_.inclination), 2.0) - 1.0) /
+                    std::pow(1.0 - elements_.eccentricity * elements_.eccentricity, 1.5);
+    double a0 = a1 * (1.0 - delta1/3.0 - delta1 * delta1 - 134.0 * delta1 * delta1 * delta1 / 81.0);
+    elements_.a = a0 * AE;
 
     // Коррекция среднего движения
-    double del1 = 1.5 * CK2 * x3thm1 / (betao * betao2);
-    elements_.a = a1 * (1.0 - del1 * (1.0/3.0 + del1 * (1.0 + 134.0/81.0 * del1)));
-    double ao = elements_.a;
-    elements_.n0 = elements_.mean_motion;
-    elements_.n = elements_.n0 + del1 * elements_.n0 * (1.0 + del1 * 134.0/81.0);
+    elements_.n = elements_.n0 / (1.0 + delta1);
 }
 
 SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
@@ -40,50 +40,39 @@ SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& tim
     double tsince = elements_.epoch.secsTo(time) / 60.0;
 
     // Учет вековых возмущений
-    double xmdf = elements_.mean_anomaly + elements_.n * tsince;
-    double omgadf = elements_.arg_perigee;
-    double xnode = elements_.right_ascension;
-    double bstar = elements_.bstar;
-
-    // Расчет возмущений от J2
-    double cosio = qCos(elements_.inclination);
-    double sinio = qSin(elements_.inclination);
-    double eta = qSqrt(1.0 - elements_.eccentricity * elements_.eccentricity);
-    double c1 = CK2 * 1.5;
-    double a0 = qPow(XKE / elements_.n0, 2.0/3.0);
-    double d0 = 3.0 * c1 * qPow(sinio, 2.0) / (2.0 * eta * eta * a0 * a0);
-    double d1 = d0 * elements_.n0;
-
-    // Обновление средней аномалии
-    double mp = xmdf + d1 * tsince;
+    double xndt = elements_.n * tsince;
+    double xldot = elements_.n + xndt;
 
     // Решение уравнения Кеплера
+    double xn = elements_.n;
+    double xl = elements_.mean_anomaly + xldot * tsince;
     double e = elements_.eccentricity;
-    double E = mp;
-    for(int i = 0; i < 10; i++) {
-        double delta = E - e * qSin(E) - mp;
-        E = E - delta / (1.0 - e * qCos(E));
-        if(qAbs(delta) < 1e-12) break;
-    }
 
-    // Расчет позиции в орбитальной плоскости
-    double cosE = qCos(E);
-    double sinE = qSin(E);
+    double u = xl - elements_.right_ascension;
+    double sin_u = std::sin(u);
+    double cos_u = std::cos(u);
 
-    double r = elements_.a * (1.0 - e * cosE);
-    double rdot = elements_.a * elements_.n * e * sinE / r;
+    // Расчет позиции в орбитальной плоскости (с учетом масштаба)
+    double r = elements_.a * (1.0 - e * std::cos(xl));
+    double rdot = elements_.a * elements_.n * e * std::sin(xl) / std::sqrt(1.0 - e * e);
 
-    double cosnu = (cosE - e) / (1.0 - e * cosE);
-    double sinnu = qSqrt(1.0 - e * e) * sinE / (1.0 - e * cosE);
-    double nu = qAtan2(sinnu, cosnu);
+    // Преобразование в ECI с правильным масштабом
+    double xmx = -sin_u * std::cos(elements_.inclination);
+    double xmy = cos_u * std::cos(elements_.inclination);
+    double xmz = std::sin(elements_.inclination) * std::sin(u);
 
-    // Ориентация орбитальной плоскости
-    double u = nu + omgadf;
-    double rfdot = elements_.a * elements_.n * qSqrt(1.0 - e * e) / r;
+    state.position = QVector3D(
+        r * cos_u,
+        r * sin_u * std::cos(elements_.inclination),
+        r * sin_u * std::sin(elements_.inclination)
+        );
 
-    // Преобразование в ECI координаты
-    state.position = getPosition(r, u, elements_.inclination, xnode);
-    state.velocity = getVelocity(r, rdot, u, rfdot, elements_.inclination, xnode);
+    double vm = std::sqrt(MU / (r * AE)) * AE;
+    state.velocity = QVector3D(
+        vm * (-sin_u),
+        vm * (cos_u * std::cos(elements_.inclination)),
+        vm * (cos_u * std::sin(elements_.inclination))
+        );
 
     return state;
 }

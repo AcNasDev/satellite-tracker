@@ -75,7 +75,7 @@ void SGP4Propagator::calculateDerivatives() {
     qDebug() << "nddot (rad/min³):" << elements_.nddot;
 }
 
-double SGP4Propagator::solveKepler(double mean_anomaly, double ecc) const {
+double SGP4Propagator::solveKepler(double mean_anomaly, double ecc) {
     double E = mean_anomaly;
     for(int i = 0; i < 10; i++) {
         double E_old = E;
@@ -152,7 +152,7 @@ void SGP4Propagator::propagate(double tsince, QVector3D& pos, QVector3D& vel) {
     qDebug() << "Velocity (km/s):" << vel;
 }
 
-SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
+SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) {
     OrbitalState state;
     state.epoch = time;
     double tsince = epoch_.msecsTo(time) / (1000.0 * 60.0);

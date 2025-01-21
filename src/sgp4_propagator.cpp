@@ -7,14 +7,19 @@ SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
 
 void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
     // Преобразование базовых элементов
+    if (tle.mean_motion <= 0) {
+        throw std::invalid_argument("Invalid mean motion");
+    }
+
+    // Уточнить преобразования
+    sgp4_.n0 = tle.mean_motion * (2.0 * M_PI / MINUTES_PER_DAY);
+    sgp4_.bstar = tle.bstar;
     elements_.epoch = tle.epoch;
     sgp4_.i = tle.inclination * DE2RA;
     sgp4_.Omega = tle.right_ascension * DE2RA;
     sgp4_.e = tle.eccentricity;
     sgp4_.omega = tle.argument_perigee * DE2RA;
     sgp4_.M = tle.mean_anomaly * DE2RA;
-    sgp4_.n0 = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
-    sgp4_.bstar = tle.bstar;
 
     // Вычисление производных элементов
     const double cos_i = cos(sgp4_.i);

@@ -39,6 +39,7 @@ private:
     static constexpr double AE = 1.0;
     static constexpr double XMNPDA = 1440.0;
     static constexpr double OMEGA_E = 7.29211514670698e-5; // рад/с
+    static constexpr double TWOPI = 2.0 * M_PI;           // Добавлена константа TWOPI
 
     struct DeepSpaceElements {
         double aodp, cosio, sinio, omgdot, xnodot, xmdot;

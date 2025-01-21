@@ -1,51 +1,104 @@
 #include "sgp4_propagator.h"
 #include <QtMath>
-#include <cmath>
 
 SGP4Propagator::SGP4Propagator(const TLEParser::TLEData& tle) {
     initializeParameters(tle);
 }
 
 void SGP4Propagator::initializeParameters(const TLEParser::TLEData& tle) {
-    // Базовые элементы
-    sgp4_.epoch = tle.epoch;
-    sgp4_.i = tle.inclination * DE2RA;
-    sgp4_.Omega = tle.right_ascension * DE2RA;
-    sgp4_.e = tle.eccentricity;
-    sgp4_.omega = tle.argument_perigee * DE2RA;
-    sgp4_.M = tle.mean_anomaly * DE2RA;
-    sgp4_.n0 = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
-    sgp4_.bstar = tle.bstar;
+    // Сохраняем эпоху
+    elements_.epoch = tle.epoch;
 
-    // Вычисление производных элементов
-    sgp4_.cosio = cos(sgp4_.i);
-    sgp4_.sinio = sin(sgp4_.i);
-    sgp4_.x3thm1 = 3.0 * sgp4_.cosio * sgp4_.cosio - 1.0;
-    sgp4_.x1mth2 = 1.0 - sgp4_.cosio * sgp4_.cosio;
-    sgp4_.x7thm1 = 7.0 * sgp4_.cosio * sgp4_.cosio - 1.0;
+    // Преобразуем базовые элементы
+    elements_.i = tle.inclination * DE2RA;
+    elements_.Omega = tle.right_ascension * DE2RA;
+    elements_.e = tle.eccentricity;
+    elements_.omega = tle.argument_perigee * DE2RA;
+    elements_.M = tle.mean_anomaly * DE2RA;
+    elements_.bstar = tle.bstar;
 
-    // Коррекция для SGP4
-    double beta0 = sqrt(1.0 - sgp4_.e * sgp4_.e);
-    sgp4_.eta = sqrt(1.0 - sgp4_.e * sgp4_.e);
+    // Вычисляем среднее движение
+    elements_.n0 = tle.mean_motion * 2.0 * M_PI / MINUTES_PER_DAY;
 
-    // Вычисление a1 и коррекция mean motion
-    double a1 = pow(XKE / sgp4_.n0, 2.0/3.0);
-    double delta1 = 1.5 * CK2 * sgp4_.x3thm1 / (a1 * a1 * beta0 * beta0 * beta0);
-    sgp4_.a0 = a1 * (1.0 - delta1 * (1.0/3.0 + delta1 * (1.0 + 134.0/81.0 * delta1)));
-    double delta0 = 1.5 * CK2 * sgp4_.x3thm1 / (sgp4_.a0 * sgp4_.a0 * beta0 * beta0 * beta0);
+    // Вспомогательные величины
+    elements_.cosio = cos(elements_.i);
+    elements_.sinio = sin(elements_.i);
+    elements_.eta = sqrt(1.0 - elements_.e * elements_.e);
+    elements_.beta0 = sqrt(1.0 - elements_.e * elements_.e);
 
-    // Обновление mean motion с учетом возмущений
-    sgp4_.n = sgp4_.n0 / (1.0 + delta0);
-    sgp4_.a = sgp4_.a0 * pow((sgp4_.n0/sgp4_.n), 2.0/3.0);
+    // Вычисляем большую полуось
+    double temp = 0.75 * J2 * (3.0 * elements_.cosio * elements_.cosio - 1.0) /
+                  (elements_.beta0 * elements_.beta0 * elements_.beta0);
 
-    // Коэффициенты для long-period periodic effects
-    sgp4_.c1 = CK2 * sgp4_.x3thm1;
-    sgp4_.c4 = 2.0 * sgp4_.n * CK2 * sgp4_.x3thm1 *
-               sgp4_.a * beta0 * beta0 / (sgp4_.eta * sgp4_.eta * sgp4_.eta);
+    double a1 = pow(XKE / elements_.n0, 2.0/3.0);
+    double delta1 = temp / (a1 * a1);
+    elements_.a0 = a1 * (1.0 - delta1 * (1.0/3.0 + delta1 * (1.0 + 134.0/81.0 * delta1)));
 
-    // Расчет производных mean motion
-    sgp4_.ndot = -2.0 * (1.0/3.0) * delta0 * sgp4_.n * (1.0 + 4.0 * delta0);
-    sgp4_.nddot = -delta0 * delta0 * sgp4_.n * (15.0/6.0 + 17.0 * delta0);
+    // Корректируем среднее движение
+    double delta0 = temp / (elements_.a0 * elements_.a0);
+    elements_.n = elements_.n0 * (1.0 + delta0);
+
+    // Коэффициенты для вековых возмущений
+    elements_.c1 = elements_.bstar * CK2 * 1.5 / (elements_.beta0 * elements_.beta0 * elements_.beta0);
+
+    // Большая полуось
+    elements_.a = elements_.a0 * pow((elements_.n0/elements_.n), 2.0/3.0);
+}
+
+QVector3D SGP4Propagator::calculatePosVel(const double tsince) const {
+    // Вековые возмущения
+    double xmdf = elements_.M + elements_.n * tsince;
+    double omgdf = elements_.omega + 0.75 * J2 * elements_.n * tsince *
+                                         (2.0 - 3.0 * elements_.cosio * elements_.cosio) /
+                                         (elements_.a * elements_.a * elements_.beta0 * elements_.beta0);
+    double xnode = elements_.Omega - 1.5 * J2 * elements_.n * tsince *
+                                         elements_.cosio / (elements_.a * elements_.a * elements_.beta0 * elements_.beta0);
+
+    // Решаем уравнение Кеплера
+    double E = solveKeplerEquation(xmdf, elements_.e);
+
+    // Вычисляем истинную аномалию
+    double sinE = sin(E);
+    double cosE = cos(E);
+    double nu = atan2(elements_.eta * sinE, cosE - elements_.e);
+
+    // Вычисляем радиус-вектор
+    double r = elements_.a * (1.0 - elements_.e * cosE);
+
+    // Позиция в орбитальной плоскости
+    double sin_nu = sin(nu);
+    double cos_nu = cos(nu);
+    double x = r * cos_nu;
+    double y = r * sin_nu;
+
+    // Преобразуем в ECI
+    double sin_i = elements_.sinio;
+    double cos_i = elements_.cosio;
+    double sin_node = sin(xnode);
+    double cos_node = cos(xnode);
+    double sin_arg = sin(omgdf);
+    double cos_arg = cos(omgdf);
+
+    // Позиция в ECI (км)
+    double xh = x * (cos_node * cos_arg - sin_node * sin_arg * cos_i);
+    double yh = x * (sin_node * cos_arg + cos_node * sin_arg * cos_i);
+    double zh = x * sin_arg * sin_i;
+
+    xh = xh * XKMPER;
+    yh = yh * XKMPER;
+    zh = zh * XKMPER;
+
+    return QVector3D(xh, yh, zh);
+}
+
+double SGP4Propagator::solveKeplerEquation(double M, double e) const {
+    double E = M;
+    for(int i = 0; i < 10; i++) {
+        double delta = (M + e * sin(E) - E) / (1.0 - e * cos(E));
+        E += delta;
+        if(fabs(delta) < 1e-12) break;
+    }
+    return E;
 }
 
 SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& time) const {
@@ -53,108 +106,17 @@ SGP4Propagator::OrbitalState SGP4Propagator::calculateState(const QDateTime& tim
     state.epoch = time;
 
     // Время с эпохи в минутах
-    double tsince = sgp4_.epoch.msecsTo(time) / (1000.0 * 60.0);
+    double tsince = elements_.epoch.msecsTo(time) / (1000.0 * 60.0);
 
-    // Расчет вековых возмущений
-    double xmdf = sgp4_.M + sgp4_.n * tsince;
-    double omgadf = sgp4_.omega + sgp4_.ndot * tsince;
-    double xnode = sgp4_.Omega + sgp4_.nddot * tsince * tsince / 2.0;
+    // Вычисляем положение и скорость
+    QVector3D pos_vel = calculatePosVel(tsince);
 
-    // Учет долгопериодических возмущений
-    calculateSecularEffects(tsince, xmdf, omgadf, xnode);
+    state.position = pos_vel;
 
-    // Расчет периодических возмущений
-    double ep = sgp4_.e;
-    double xincp = sgp4_.i;
-    calculatePeriodicEffects(tsince, ep, xincp, omgadf, xnode);
-
-    // Решение уравнения Кеплера
-    double xl = xmdf + omgadf + xnode;
-    double u = fmod(xl - xnode, 2.0 * M_PI);
-    double eo1 = u;
-
-    double tem5 = 1.0;
-    int iteration = 0;
-    while (fabs(tem5) >= 1e-12 && iteration < 10) {
-        double sineo1 = sin(eo1);
-        double coseo1 = cos(eo1);
-        tem5 = 1.0 - coseo1 * ep - sineo1 * sgp4_.e - u;
-        tem5 = tem5 / (sineo1 * ep - coseo1 * sgp4_.e) *
-               (1.0 / (1.0 - coseo1 * ep - sineo1 * sgp4_.e));
-        eo1 = eo1 - tem5;
-        iteration++;
-    }
-
-    // Расчет позиции и скорости
-    double sinu = sin(u);
-    double cosu = cos(u);
-
-    double rk = sgp4_.a * (1.0 - ep * cos(eo1));
-    double uk = u + omgadf;
-    double xnodek = xnode;
-    double xinck = xincp;
-
-    double rdotk = sgp4_.a * ep * sin(eo1) * sgp4_.n / rk;
-    double rfdotk = sgp4_.a * sqrt(1.0 - ep * ep) * cos(eo1) * sgp4_.n / rk;
-
-    QVector3D pos_vel = calculatePositionAndVelocity(rk, uk, xnodek, xinck, rdotk, rfdotk);
-    state.position = QVector3D(pos_vel.x(), pos_vel.y(), 0);
-    state.velocity = QVector3D(0, 0, pos_vel.z());
+    // Вычисляем скорость численным методом
+    const double dt = 0.0001; // малый шаг времени
+    QVector3D pos2 = calculatePosVel(tsince + dt);
+    state.velocity = (pos2 - pos_vel) / dt;
 
     return state;
-}
-
-void SGP4Propagator::calculateSecularEffects(double tsince, double& xmdf,
-                                             double& omgadf, double& xnode) const {
-    double xmp = xmdf + sgp4_.c1 * tsince *
-                            (1.0 - 3.0 * sgp4_.cosio * sgp4_.cosio) * 0.5;
-    double omega_df = omgadf - sgp4_.c1 * tsince *
-                                   (1.0 - 5.0 * sgp4_.cosio * sgp4_.cosio) * 0.25;
-    xnode = xnode + sgp4_.c1 * tsince *
-                        (4.0 - 19.0 * sgp4_.cosio * sgp4_.cosio) * 0.25;
-
-    xmdf = xmp;
-    omgadf = omega_df;
-}
-
-void SGP4Propagator::calculatePeriodicEffects(double tsince, double& ep, double& xincp,
-                                              double& omgadf, double& xnode) const {
-    double sin_omega = sin(omgadf);
-    double cos_omega = cos(omgadf);
-
-    // Short-period периодические возмущения
-    double dx = sgp4_.c4 * sin(2.0 * omgadf);
-    double dy = -sgp4_.c4 * cos(2.0 * omgadf);
-
-    ep = sgp4_.e + dx;
-    xincp = sgp4_.i + dy;
-}
-
-QVector3D SGP4Propagator::calculatePositionAndVelocity(double rk, double uk,
-                                                       double xnodek, double xinck,
-                                                       double rdotk, double rfdotk) const {
-    double sinuk = sin(uk);
-    double cosuk = cos(uk);
-    double sinik = sin(xinck);
-    double cosik = cos(xinck);
-    double sinnok = sin(xnodek);
-    double cosnok = cos(xnodek);
-
-    double xmx = -sinnok * cosik;
-    double xmy = cosnok * cosik;
-    double ux = xmx * sinuk + cosnok * cosuk;
-    double uy = xmy * sinuk + sinnok * cosuk;
-    double uz = sinik * sinuk;
-
-    // Позиция в км
-    double x = rk * ux * XKMPER;
-    double y = rk * uy * XKMPER;
-    double z = rk * uz * XKMPER;
-
-    // Скорость в км/с
-    double vx = (rdotk * ux + rfdotk * (-xmx * cosuk + cosnok * sinuk)) * XKMPER / 60.0;
-    double vy = (rdotk * uy + rfdotk * (-xmy * cosuk + sinnok * sinuk)) * XKMPER / 60.0;
-    double vz = (rdotk * uz + rfdotk * (sinik * cosuk)) * XKMPER / 60.0;
-
-    return QVector3D(x, y, z);
 }

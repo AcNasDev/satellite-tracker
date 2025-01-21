@@ -10,7 +10,7 @@
 class SGP4Propagator {
 public:
     struct OrbitalState {
-        QVector3D position;     // км в системе ECI (Earth-Centered Inertial)
+        QVector3D position;     // км в системе ECI
         QVector3D velocity;     // км/с в системе ECI
         QDateTime epoch;        // время расчета
     };
@@ -19,53 +19,46 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // Константы SGP4
-    static constexpr double XKE = 7.43669161e-2;        // sqrt(398600.4418 / earthRadius^3)
-    static constexpr double CK2 = 5.413080e-4;          // 0.5 * J2 * earthRadius^2
-    static constexpr double CK4 = 0.62098875e-6;        // -0.375 * J4 * earthRadius^4
-    static constexpr double XKMPER = 6378.135;          // Earth radius km
-    static constexpr double AE = 1.0;                   // Distance units/Earth radii
-    static constexpr double DE2RA = 0.174532925e-1;     // π/180 (degrees to radians)
+    // Фундаментальные константы
+    static constexpr double XKE = 7.43669161e-2;
+    static constexpr double CK2 = 5.413080e-4;
+    static constexpr double CK4 = 0.62098875e-6;
+    static constexpr double XKMPER = 6378.137;          // Радиус Земли (км)
+    static constexpr double AE = 1.0;
+    static constexpr double DE2RA = M_PI / 180.0;       // Градусы в радианы
     static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double OMEGA_E = 7.29211514670698e-5; // Earth rotation rad/s
-    static constexpr double QOMS2T = 1.880279e-09;      // (q0 - s)^4, q0 = 120 км
-    static constexpr double S = 1.01222928;             // для расчета атмосферного торможения
+    static constexpr double OMEGA_E = 7.29211514670698e-5; // Угловая скорость вращения Земли (рад/с)
+    static constexpr double J2 = 1.082616e-3;           // J2 гармоника
+    static constexpr double J3 = -2.53881e-6;           // J3 гармоника
+    static constexpr double J4 = -1.65597e-6;           // J4 гармоника
 
     struct SGP4Elements {
-        double a;          // Semi-major axis (Earth radii)
-        double e;          // Eccentricity
-        double i;          // Inclination (radians)
-        double omega;      // Argument of perigee (radians)
-        double Omega;      // Right ascension (radians)
-        double M;          // Mean anomaly (radians)
-        double n;          // Mean motion (radians/minute)
-        double bstar;      // Drag term
-        QDateTime epoch;   // Epoch time
+        double a;          // Большая полуось (радиусы Земли)
+        double e;          // Эксцентриситет
+        double i;          // Наклонение (радианы)
+        double omega;      // Аргумент перигея (радианы)
+        double Omega;      // Прямое восхождение (радианы)
+        double M;          // Средняя аномалия (радианы)
+        double n;          // Среднее движение (рад/мин)
+        double bstar;      // Баллистический коэффициент
+        QDateTime epoch;   // Эпоха
 
-        // Производные элементы
-        double n0;         // Original mean motion
-        double a0;         // Original semi major axis
-        double ndot;       // First time derivative of mean motion
-        double nddot;      // Second time derivative of mean motion
-        double cosio;      // Cosine of inclination
-        double sinio;      // Sine of inclination
+        // Вспомогательные элементы
+        double cosio;      // cos(i)
+        double sinio;      // sin(i)
         double eta;        // sqrt(1 - e^2)
-        double coef;       // Coefficient for secular perturbations
-        double c1;         // Coefficient for long-period perturbations
-        double c4;         // Coefficient for periodic perturbations
-        double x3thm1;     // 3 * cos^2(i) - 1
-        double x1mth2;     // 1 - cos^2(i)
-        double x7thm1;     // 7 * cos^2(i) - 1
+        double coef;       // Коэффициент для вековых возмущений
+        double c1;         // Коэффициент J2
+        double a0;         // Начальная большая полуось
+        double n0;         // Начальное среднее движение
+        double beta0;      // sqrt(1 - e^2)
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    void calculateSecularEffects(double tsince, double& xmdf, double& omgadf, double& xnode) const;
-    void calculatePeriodicEffects(double tsince, double& ep, double& xincp,
-                                  double& omgadf, double& xnode) const;
-    QVector3D calculatePositionAndVelocity(double rk, double uk, double xnodek,
-                                           double xinck, double rdotk, double rfdotk) const;
+    QVector3D calculatePosVel(const double tsince) const;
+    double solveKeplerEquation(double M, double e) const;
 
-    SGP4Elements sgp4_;
+    SGP4Elements elements_;
 };
 
 #endif // SGP4_PROPAGATOR_H

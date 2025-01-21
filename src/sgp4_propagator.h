@@ -19,33 +19,44 @@ public:
     OrbitalState calculateState(const QDateTime& time) const;
 
 private:
-    // Константы
-    static constexpr double XKE = 7.43669161e-2;
+    // Константы SGP4
+    static constexpr double XKE = 0.0743669161331734049;
     static constexpr double CK2 = 5.413080e-4;
     static constexpr double CK4 = 0.62098875e-6;
-    static constexpr double XKMPER = 6378.137;          // Радиус Земли (км)
+    static constexpr double XKMPER = 6378.137;
     static constexpr double AE = 1.0;
-    static constexpr double DE2RA = M_PI / 180.0;       // Градусы в радианы
+    static constexpr double DE2RA = M_PI / 180.0;
     static constexpr double MINUTES_PER_DAY = 1440.0;
-    static constexpr double OMEGA_E = 7.29211514670698e-5;
-    static constexpr double XMNPDA = 1440.0;            // Минут в день
-    static constexpr double MFACTOR = 7.292115E-5;      // Угловая скорость Земли
+    static constexpr double TOTHRD = 2.0/3.0;
+    static constexpr double J2 = 1.082616e-3;
+    static constexpr double J3 = -2.53881e-6;
+    static constexpr double J4 = -1.65597e-6;
 
     struct Elements {
-        double a;          // Большая полуось (км)
-        double e;          // Эксцентриситет
-        double i;          // Наклонение (рад)
-        double omega;      // Аргумент перигея (рад)
-        double Omega;      // Долгота восходящего узла (рад)
-        double M;          // Средняя аномалия (рад)
-        double n;          // Среднее движение (рад/мин)
-        double bstar;      // Баллистический коэффициент
-        QDateTime epoch;   // Эпоха
+        double i;              // Наклонение (рад)
+        double Omega;          // Долгота восходящего узла (рад)
+        double e;              // Эксцентриситет
+        double omega;          // Аргумент перигея (рад)
+        double M;              // Средняя аномалия (рад)
+        double n;              // Среднее движение (рад/мин)
+        double bstar;          // Баллистический коэффициент
+        QDateTime epoch;       // Эпоха
+
+        // Вспомогательные параметры
+        double a;              // Большая полуось
+        double cosio;          // cos(i)
+        double sinio;          // sin(i)
+        double eta;            // sqrt(1 - e^2)
+        double con41;          // Коэффициент для периодических возмущений
+        double x1mth2;         // 1 - theta^2
+        double x3thm1;         // 3 * theta^2 - 1
+        double x7thm1;         // 7 * theta^2 - 1
+        double xlcof;          // Коэффициент для долгопериодических возмущений
+        double aycof;          // Коэффициент для годовых возмущений
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    QVector3D calculatePositionAndVelocity(double tsince) const;
-    double solveKepler(double meanAnomaly, double eccentricity) const;
+    void calculateStateVectors(double tsince, QVector3D& pos, QVector3D& vel) const;
 
     Elements elements_;
 };

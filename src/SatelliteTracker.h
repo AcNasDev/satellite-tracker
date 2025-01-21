@@ -71,33 +71,29 @@ private slots:
         qDebug() << "X:" << QString::number(eci.Position().x, 'f', 3);
         qDebug() << "Y:" << QString::number(eci.Position().y, 'f', 3);
         qDebug() << "Z:" << QString::number(eci.Position().z, 'f', 3);
-        qDebug() << "\nGeographic coordinates:";
-        qDebug() << "Latitude:" << QString::number(geo.latitude * 180.0 / M_PI, 'f', 6) << "degrees";
-        qDebug() << "Longitude:" << QString::number(geo.longitude * 180.0 / M_PI, 'f', 6) << "degrees";
-        qDebug() << "Altitude:" << QString::number(geo.altitude, 'f', 3) << "km";
         qDebug() << "\nVelocity (km/s):";
         qDebug() << "X:" << QString::number(eci.Velocity().x, 'f', 6);
         qDebug() << "Y:" << QString::number(eci.Velocity().y, 'f', 6);
         qDebug() << "Z:" << QString::number(eci.Velocity().z, 'f', 6);
         qDebug() << "----------------------------------------";
 
-        qDebug() << "Propagator results:";
+        qDebug() << "SGP4Propagator results:";
         SGP4Propagator::OrbitalState state = propagator->calculateState(now);
         qDebug() << "ECI coordinates:";
         qDebug() << "Position (km):" << state.position;
         qDebug() << "Velocity (km/s):" << state.velocity;
 
-        // Преобразование в ECEF
-        QVector3D ecef_pos = CoordinateConverter::eci2ecef(state.position, now);
-        qDebug() << "\nECEF coordinates:";
-        qDebug() << "Position (km):" << ecef_pos;
+        // // Преобразование в ECEF
+        // QVector3D ecef_pos = CoordinateConverter::eci2ecef(state.position, now);
+        // qDebug() << "\nECEF coordinates:";
+        // qDebug() << "Position (km):" << ecef_pos;
 
-        // Преобразование в геодезические координаты
-        auto geodetic = CoordinateConverter::ecef2geodetic(ecef_pos);
-        qDebug() << "\nGeodetic coordinates:";
-        qDebug() << "Latitude:" << geodetic.latitude << "degrees";
-        qDebug() << "Longitude:" << geodetic.longitude << "degrees";
-        qDebug() << "Altitude:" << geodetic.altitude << "km";
+        // // Преобразование в геодезические координаты
+        // auto geodetic = CoordinateConverter::ecef2geodetic(ecef_pos);
+        // qDebug() << "\nGeodetic coordinates:";
+        // qDebug() << "Latitude:" << geodetic.latitude << "degrees";
+        // qDebug() << "Longitude:" << geodetic.longitude << "degrees";
+        // qDebug() << "Altitude:" << geodetic.altitude << "km";
 
     }
 

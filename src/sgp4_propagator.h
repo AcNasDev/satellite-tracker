@@ -27,8 +27,12 @@ private:
     static constexpr double AE = 1.0;
     static constexpr double DE2RA = M_PI / 180.0;
     static constexpr double MINUTES_PER_DAY = 1440.0;
+    static constexpr double OMEGA_E = 7.29211514670698e-5;
     static constexpr double QOMS2T = 1.880279e-09;
     static constexpr double S = 1.01222928;
+    static constexpr double TOTHRD = 2.0/3.0;
+    static constexpr double XJ3 = -2.53881e-6;
+    static constexpr double E6A = 1.0e-6;
 
     struct Elements {
         // Основные элементы орбиты
@@ -42,7 +46,7 @@ private:
         QDateTime epoch;       // Эпоха
 
         // Производные параметры
-        double a;              // Большая полуось (в радиусах Земли)
+        double a;              // Большая полуось
         double n0;             // Исходное среднее движение
         double cosio;          // cos(i)
         double sinio;          // sin(i)
@@ -54,10 +58,18 @@ private:
         double x3thm1;        // 3*cos²(i) - 1
         double x1mth2;        // 1 - cos²(i)
         double x7thm1;        // 7*cos²(i) - 1
+        double beta0;         // sqrt(1 - e^2)
+        double xhdot;         // Скорость изменения узла
+        double xndot;         // Скорость изменения среднего движения
+        double xnodot;        // Общая скорость изменения узла
+        double xmdot;         // Скорость изменения средней аномалии
+        double omgdot;        // Скорость изменения перигея
     };
 
     void initializeParameters(const TLEParser::TLEData& tle);
-    void solveKeplerEquation(double& meanAnomaly, double& eccentricAnomaly) const;
+    void updateForTime(double tsince, double& xll, double& omgadf,
+                       double& xnode, double& em, double& xinc, double& xn) const;
+    void solveKeplerEquation(double& xll, double& e) const;
     QVector3D calculatePosVel(double tsince) const;
 
     Elements elements_;
